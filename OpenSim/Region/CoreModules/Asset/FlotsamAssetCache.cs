@@ -208,10 +208,10 @@ namespace Flotsam.RegionModules.AssetCache
             {
                 scene.RegisterModuleInterface<IImprovedAssetCache>(this);
 
-                scene.AddCommand(this, "flotsamcache", "flotsamcache", "Display a list of console commands for the Flotsam Asset Cache", HandleConsoleCommand);
-                scene.AddCommand(this, "flotsamcache", "flotsamcache counts", "Display the number of cached assets", HandleConsoleCommand);
-                scene.AddCommand(this, "flotsamcache", "flotsamcache clearmem", "Remove all assets cached in memory", HandleConsoleCommand);
-                scene.AddCommand(this, "flotsamcache", "flotsamcache clearfile", "Remove all assets cached on disk", HandleConsoleCommand);
+                //scene.AddCommand(this, "flotsamcache", "", "Display a list of console commands for the Flotsam Asset Cache", HandleConsoleCommand);
+                scene.AddCommand(this, "flotsamcache counts", "flotsamcache counts", "Display the number of cached assets", HandleConsoleCommand);
+                scene.AddCommand(this, "flotsamcache clearmem", "flotsamcache clearmem", "Remove all assets cached in memory", HandleConsoleCommand);
+                scene.AddCommand(this, "flotsamcache clearfile", "flotsamcache clearfile", "Remove all assets cached on disk", HandleConsoleCommand);
             }
         }
 
