@@ -208,7 +208,7 @@ namespace Flotsam.RegionModules.AssetCache
             {
                 scene.RegisterModuleInterface<IImprovedAssetCache>(this);
 
-                scene.AddCommand(this, "flotsamcache", "", "", HandleConsoleCommand);
+                // scene.AddCommand(this, "flotsamcache", "", "", HandleConsoleCommand);
                 scene.AddCommand(this, "flotsamcache", "flotsamcache counts", "Display the number of cached assets", HandleConsoleCommand);
                 scene.AddCommand(this, "flotsamcache", "flotsamcache clearmem", "Remove all assets cached in memory", HandleConsoleCommand);
                 scene.AddCommand(this, "flotsamcache", "flotsamcache clearfile", "Remove all assets cached on disk", HandleConsoleCommand);
@@ -433,25 +433,38 @@ namespace Flotsam.RegionModules.AssetCache
 
             foreach (string dir in Directory.GetDirectories(m_CacheDirectory))
             {
-                foreach (string file in Directory.GetFiles(dir))
-                {
-                    if (DateTime.Now - File.GetLastAccessTime(file) > m_FileExpiration)
-                    {
-                        File.Delete(file);
-                    }
-                }
-
-                int dirSize = Directory.GetFiles(dir).Length;
-                if (dirSize == 0)
-                {
-                    Directory.Delete(dir);
-                }
-                else if (dirSize >= m_CacheWarnAt)
-                {
-                    m_log.WarnFormat("[FLOTSAM ASSET CACHE]: Cache folder exceeded CacheWarnAt limit {0} {1}.  Suggest increasing tiers, tier length, or reducing cache expiration", dir, dirSize);
-                }
-                
+                CleanExpiredFiles(dir);
             }
+        }
+
+        /// <summary>
+        /// Recurses through specified directory checking for expired asset files and deletes them.  Also removes empty directories.
+        /// </summary>
+        /// <param name="dir"></param>
+        private void CleanExpiredFiles(string dir)
+        {
+            foreach (string file in Directory.GetFiles(dir))
+            {
+                if (DateTime.Now - File.GetLastAccessTime(file) > m_FileExpiration)
+                {
+                    File.Delete(file);
+                }
+            }
+
+            foreach (string subdir in Directory.GetDirectories(dir))
+            {
+                CleanExpiredFiles(subdir);
+            }
+
+            int dirSize = Directory.GetFiles(dir).Length + Directory.GetDirectories(dir).Length;
+            if (dirSize == 0)
+            {
+                Directory.Delete(dir);
+            }
+            else if (dirSize >= m_CacheWarnAt)
+            {
+                m_log.WarnFormat("[FLOTSAM ASSET CACHE]: Cache folder exceeded CacheWarnAt limit {0} {1}.  Suggest increasing tiers, tier length, or reducing cache expiration", dir, dirSize);
+            }            
         }
 
         private string GetFileName(string id)
@@ -535,12 +548,71 @@ namespace Flotsam.RegionModules.AssetCache
             }
         }
 
+        private int GetFileCacheCount(string dir)
+        {
+            int count = Directory.GetFiles(dir).Length;
+
+            foreach (string subdir in Directory.GetDirectories(dir))
+            {
+                count += GetFileCacheCount(subdir);
+            }
+
+            return count;
+        }
+
         #region Console Commands
         private void HandleConsoleCommand(string module, string[] cmdparams)
         {
-            foreach (string param in cmdparams)
+            if (cmdparams.Length == 2)
             {
-                m_log.InfoFormat("[FLOTSAM ASSET CACHE] {0} {1}", module, param);
+                string cmd = cmdparams[1];
+                switch (cmd)
+                {
+                    case "count":
+                    case "counts":
+                        m_log.InfoFormat("[FLOTSAM ASSET CACHE] Memory Cache : {0}", m_MemoryCache.Count);
+
+                        int fileCount = GetFileCacheCount(m_CacheDirectory);
+                        m_log.InfoFormat("[FLOTSAM ASSET CACHE] File Cache : {0}", fileCount);
+
+                        break;
+
+                    case "clearmem":
+                        m_MemoryCache.Clear();
+                        m_log.InfoFormat("[FLOTSAM ASSET CACHE] Memory Cache Cleared, there are now {0} items in the memory cache", m_MemoryCache.Count);
+                        break;
+
+                    case "clearfile":
+                        foreach (string dir in Directory.GetDirectories(m_CacheDirectory))
+                        {
+                            try
+                            {
+                                Directory.Delete(dir, true);
+                            }
+                            catch (Exception e)
+                            {
+                                LogException(e);
+                            }
+                        }
+
+                        foreach (string file in Directory.GetFiles(m_CacheDirectory))
+                        {
+                            try
+                            {
+                                File.Delete(file);
+                            }
+                            catch (Exception e)
+                            {
+                                LogException(e);
+                            }
+                        }
+
+                        break;
+
+                    default:
+                        m_log.InfoFormat("[FLOTSAM ASSET CACHE] Unknown command {0}", cmd);
+                        break;
+                }
             }
 
         }
