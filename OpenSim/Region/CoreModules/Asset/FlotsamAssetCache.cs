@@ -208,7 +208,7 @@ namespace Flotsam.RegionModules.AssetCache
             {
                 scene.RegisterModuleInterface<IImprovedAssetCache>(this);
 
-                // scene.AddCommand(this, "flotsamcache", "", "", HandleConsoleCommand);
+                scene.AddCommand(this, "flotsamcache", "", "", HandleConsoleCommand);
                 scene.AddCommand(this, "flotsamcache", "flotsamcache counts", "Display the number of cached assets", HandleConsoleCommand);
                 scene.AddCommand(this, "flotsamcache", "flotsamcache clearmem", "Remove all assets cached in memory", HandleConsoleCommand);
                 scene.AddCommand(this, "flotsamcache", "flotsamcache clearfile", "Remove all assets cached on disk", HandleConsoleCommand);
@@ -614,6 +614,14 @@ namespace Flotsam.RegionModules.AssetCache
                         break;
                 }
             }
+            else if (cmdparams.Length == 1)
+            {
+                m_log.InfoFormat("[FLOTSAM ASSET CACHE] flotsamcache counts - Display the number of cached assets");
+                m_log.InfoFormat("[FLOTSAM ASSET CACHE] flotsamcache clearmem - Remove all assets cached in memory");
+                m_log.InfoFormat("[FLOTSAM ASSET CACHE] flotsamcache clearfile - Remove all assets cached on disk");
+
+            }
+
 
         }
 
