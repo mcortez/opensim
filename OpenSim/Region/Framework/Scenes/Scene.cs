@@ -134,6 +134,7 @@ namespace OpenSim.Region.Framework.Scenes
         public IXfer XferManager;
 
         protected IAssetService m_AssetService = null;
+        protected IAuthorizationService m_AuthorizationService = null;
 
         public IAssetService AssetService
         {
@@ -150,6 +151,25 @@ namespace OpenSim.Region.Framework.Scenes
                 }
 
                 return m_AssetService;
+            }
+        }
+        
+        public IAuthorizationService AuthorizationService
+        {
+            get
+            {
+                if (m_AuthorizationService == null)
+                {
+                    m_AuthorizationService = RequestModuleInterface<IAuthorizationService>();
+
+                    if (m_AuthorizationService == null)
+                    {
+                        // don't throw an exception if no authorization service is set for the time being
+                         m_log.InfoFormat("[SCENE]: No Authorization service is configured");
+                    }
+                }
+
+                return m_AuthorizationService;
             }
         }
 
@@ -1293,10 +1313,10 @@ namespace OpenSim.Region.Framework.Scenes
             }
             catch (IOException e)
             {
-
                 m_log.Warn("[TERRAIN]: Scene.cs: LoadWorldMap() - Failed with exception " + e.ToString() + " Regenerating");
                 
                 // Non standard region size.    If there's an old terrain in the database, it might read past the buffer
+                #pragma warning disable 0162
                 if ((int)Constants.RegionSize != 256)
                 {
                     Heightmap = new TerrainChannel();
@@ -3230,12 +3250,21 @@ namespace OpenSim.Region.Framework.Scenes
 
             if (!m_strictAccessControl) return true;
             if (Permissions.IsGod(agent.AgentID)) return true;
-
+                      
+            if (AuthorizationService != null)
+            {
+                if (!AuthorizationService.IsAuthorizedForRegion(agent.AgentID.ToString(), RegionInfo.RegionID.ToString()))
+                {
+                    m_log.WarnFormat("[CONNECTION BEGIN]: Denied access to: {0} ({1} {2}) at {3} because the user does not have access to the region",
+                                     agent.AgentID, agent.firstname, agent.lastname, RegionInfo.RegionName);
+                    return false;    
+                }
+            }
 
             if (m_regInfo.EstateSettings.IsBanned(agent.AgentID))
             {
                 m_log.WarnFormat("[CONNECTION BEGIN]: Denied access to: {0} ({1} {2}) at {3} because the user is on the banlist",
-                                agent.AgentID, agent.firstname, agent.lastname, RegionInfo.RegionName);
+                                 agent.AgentID, agent.firstname, agent.lastname, RegionInfo.RegionName);
                 reason = String.Format("Denied access to region {0}: You have been banned from that region.",
                                        RegionInfo.RegionName);
                 return false;

@@ -80,6 +80,11 @@
 
     ; How many prims to send to each avatar in the scene on each Update()
     ; MaxPrimsPerFrame = 200
+    
+    ; Combine all contiguous regions into one large region
+    ; Order your regions from South to North, West to East in your regions.ini and then set this to true
+    ; Warning!  Don't use this with regions that have existing content!, This will likely break them
+     CombineContiguousRegions=false
 
     ; ##
     ; ## STORAGE
@@ -194,17 +199,6 @@
 
     ;WorldMapModule = "WorldMap"
     ;MapImageModule = "MapImageModule"
-
-    ; ##
-    ; ## Scripting XMLRPC mapper
-    ; ##
-
-    ; If enabled, this will post an event, "xmlrpc_uri(string)" to the
-    ; script concurrently with the first remote_data event.
-    ; This will contain the fully qualified URI an external site needs
-    ; to use to send XMLRPC requests to that script
-
-    ;XmlRpcRouterModule = "XmlRpcRouterModule"
 
     ; ##
     ; ## EMAIL MODULE
@@ -1416,3 +1410,16 @@
     ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 [Modules]
     Include-modules = "addon-modules/*/config/*.ini"
+
+[XMLRPC]
+    ; ##
+    ; ## Scripting XMLRPC mapper
+    ; ##
+
+    ; If enabled, this will post an event, "xmlrpc_uri(string)" to the
+    ; script concurrently with the first remote_data event.
+    ; This will contain the fully qualified URI an external site needs
+    ; to use to send XMLRPC requests to that script
+
+    ;XmlRpcRouterModule = "XmlRpcRouterModule"
+    ;XmlRpcPort = 20800

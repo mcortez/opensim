@@ -423,14 +423,16 @@ namespace OpenSim
             {
                 m_log.Info("[COMMANDFILE]: Running " + fileName);
 
-                StreamReader readFile = File.OpenText(fileName);
-                string currentCommand;
-                while ((currentCommand = readFile.ReadLine()) != null)
+                using (StreamReader readFile = File.OpenText(fileName))
                 {
-                    if (currentCommand != String.Empty)
+                    string currentCommand;
+                    while ((currentCommand = readFile.ReadLine()) != null)
                     {
-                        m_log.Info("[COMMANDFILE]: Running '" + currentCommand + "'");
-                        m_console.RunCommand(currentCommand);
+                        if (currentCommand != String.Empty)
+                        {
+                            m_log.Info("[COMMANDFILE]: Running '" + currentCommand + "'");
+                            m_console.RunCommand(currentCommand);
+                        }
                     }
                 }
             }
@@ -1041,6 +1043,14 @@ namespace OpenSim
             string email;
             uint regX = 1000;
             uint regY = 1000;
+
+            IConfig standalone;
+            if ((standalone = m_config.Source.Configs["StandAlone"]) != null)
+            {
+                regX = (uint)standalone.GetInt("default_location_x", (int)regX);
+                regY = (uint)standalone.GetInt("default_location_y", (int)regY);
+            }
+
 
             if (cmdparams.Length < 3)
                 firstName = MainConsole.Instance.CmdPrompt("First name", "Default");
