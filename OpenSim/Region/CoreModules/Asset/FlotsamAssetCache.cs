@@ -142,7 +142,7 @@ namespace Flotsam.RegionModules.AssetCache
                     m_CacheDirectory = assetConfig.GetString("CacheDirectory", m_DefaultCacheDirectory);
                     m_log.InfoFormat("[FLOTSAM ASSET CACHE]: Cache Directory", m_DefaultCacheDirectory);
 
-                    m_MemoryCacheEnabled = assetConfig.GetBoolean("MemoryCacheEnabled", true);
+                    m_MemoryCacheEnabled = assetConfig.GetBoolean("MemoryCacheEnabled", false);
                     m_MemoryExpiration = TimeSpan.FromHours(assetConfig.GetDouble("MemoryCacheTimeout", m_DefaultMemoryExpiration));
 
 #if WAIT_ON_INPROGRESS_REQUESTS
@@ -150,7 +150,7 @@ namespace Flotsam.RegionModules.AssetCache
 #endif
 
                     m_LogLevel = assetConfig.GetInt("LogLevel", 1);
-                    m_HitRateDisplay = (ulong)assetConfig.GetInt("HitRateDisplay", 1);
+                    m_HitRateDisplay = (ulong)assetConfig.GetInt("HitRateDisplay", 1000);
 
                     m_FileExpiration = TimeSpan.FromHours(assetConfig.GetDouble("FileCacheTimeout", m_DefaultFileExpiration));
                     m_FileExpirationCleanupTimer = TimeSpan.FromHours(assetConfig.GetDouble("FileCleanupTimer", m_DefaultFileExpiration));
@@ -323,13 +323,13 @@ namespace Flotsam.RegionModules.AssetCache
                 string filename = GetFileName(id);
                 if (File.Exists(filename))
                 {
+                    FileStream stream = null;
                     try
                     {
-                        FileStream stream = File.Open(filename, FileMode.Open, FileAccess.Read, FileShare.Read);
+                        stream = File.Open(filename, FileMode.Open, FileAccess.Read, FileShare.Read);
                         BinaryFormatter bformatter = new BinaryFormatter();
 
                         asset = (AssetBase)bformatter.Deserialize(stream);
-                        stream.Close();
 
                         UpdateMemoryCache(id, asset);
 
@@ -348,6 +348,11 @@ namespace Flotsam.RegionModules.AssetCache
                     catch (Exception e)
                     {
                         LogException(e);
+                    }
+                    finally
+                    {
+                        if (stream != null)
+                            stream.Close();
                     }
                 }
 
@@ -470,7 +475,7 @@ namespace Flotsam.RegionModules.AssetCache
             else if (dirSize >= m_CacheWarnAt)
             {
                 m_log.WarnFormat("[FLOTSAM ASSET CACHE]: Cache folder exceeded CacheWarnAt limit {0} {1}.  Suggest increasing tiers, tier length, or reducing cache expiration", dir, dirSize);
-            }            
+            }
         }
 
         private string GetFileName(string id)
@@ -493,19 +498,20 @@ namespace Flotsam.RegionModules.AssetCache
 
         private void WriteFileCache(string filename, AssetBase asset)
         {
+            Stream stream = null;
+            // Make sure the target cache directory exists
+            string directory = Path.GetDirectoryName(filename);
+            // Write file first to a temp name, so that it doesn't look 
+            // like it's already cached while it's still writing.
+            string tempname = Path.Combine(directory, Path.GetRandomFileName());
             try
             {
-                // Make sure the target cache directory exists
-                string directory = Path.GetDirectoryName(filename);
                 if (!Directory.Exists(directory))
                 {
                     Directory.CreateDirectory(directory);
                 }
 
-                // Write file first to a temp name, so that it doesn't look 
-                // like it's already cached while it's still writing.
-                string tempname = Path.Combine(directory, Path.GetRandomFileName());
-                Stream stream = File.Open(tempname, FileMode.Create);
+                stream = File.Open(tempname, FileMode.Create);
                 BinaryFormatter bformatter = new BinaryFormatter();
                 bformatter.Serialize(stream, asset);
                 stream.Close();
@@ -522,6 +528,9 @@ namespace Flotsam.RegionModules.AssetCache
             }
             finally
             {
+                if (stream != null)
+                    stream.Close();
+
                 // Even if the write fails with an exception, we need to make sure
                 // that we release the lock on that file, otherwise it'll never get
                 // cached
@@ -627,11 +636,8 @@ namespace Flotsam.RegionModules.AssetCache
                 m_log.InfoFormat("[FLOTSAM ASSET CACHE] flotsamcache clearfile - Remove all assets cached on disk");
 
             }
-
-
         }
 
         #endregion
-
     }
 }

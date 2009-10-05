@@ -306,10 +306,6 @@ namespace OpenSim
                                           "delete-region <name>",
                                           "Delete a region from disk", RunCommand);
 
-            m_console.Commands.AddCommand("region", false, "predecode-j2k",
-                                          "predecode-j2k [<num threads>]>",
-                                          "Precache assets,decode j2k layerdata", RunCommand);
-
             m_console.Commands.AddCommand("region", false, "modules list",
                                           "modules list",
                                           "List modules", HandleModules);
@@ -497,7 +493,7 @@ namespace OpenSim
         {
             if (cmd.Length < 4)
             {
-                m_log.Error("Usage: create region <region name> <region_file.xml>");
+                m_log.Error("Usage: create region <region name> <region_file.ini>");
                 return;
             }
             if (cmd[3].EndsWith(".xml"))
@@ -524,7 +520,7 @@ namespace OpenSim
             }
             else
             {
-                m_log.Error("Usage: create region <region name> <region_file.xml>");
+                m_log.Error("Usage: create region <region name> <region_file.ini>");
                 return;
             }
         }
@@ -557,7 +553,7 @@ namespace OpenSim
         /// <param name="cmd"></param>
         private void HandleLoginStatus(string module, string[] cmd)
         {
-            if (m_commsManager.GridService.RegionLoginsEnabled == false)
+            if (m_sceneManager.CurrentOrFirstScene.SceneGridService.RegionLoginsEnabled == false)
 
                 m_log.Info("[ Login ]  Login are disabled ");
             else
@@ -744,22 +740,6 @@ namespace OpenSim
                     }
                     break;
 
-                case "predecode-j2k":
-                    if (cmdparams.Length > 0)
-                    {
-                        m_sceneManager.CacheJ2kDecode(Convert.ToInt32(cmdparams[0]));
-                    }
-                    else
-                    {
-                        m_sceneManager.CacheJ2kDecode(1);
-                    }
-                    break;
-
-                case "link-region":
-                case "unlink-region":
-                case "link-mapping":
-                    HGCommands.RunHGCommand(command, cmdparams, m_sceneManager.CurrentOrFirstScene);
-                    break;
             }
         }
 
@@ -1250,20 +1230,20 @@ namespace OpenSim
         protected void LoadOar(string module, string[] cmdparams)
         {
             try
-            {            
+            {
                 if (cmdparams.Length > 2)
                 {
-                    m_sceneManager.LoadArchiveToCurrentScene(cmdparams[2]);             
+                    m_sceneManager.LoadArchiveToCurrentScene(cmdparams[2]);
                 }
                 else
                 {
-                    m_sceneManager.LoadArchiveToCurrentScene(DEFAULT_OAR_BACKUP_FILENAME);              
+                    m_sceneManager.LoadArchiveToCurrentScene(DEFAULT_OAR_BACKUP_FILENAME);
                 }
             }
             catch (Exception e)
             {
                 m_log.Error(e.Message);
-            }   
+            }
         }
 
         /// <summary>

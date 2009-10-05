@@ -48,6 +48,8 @@ using OpenSim.Region.ScriptEngine.Shared.ScriptBase;
 using OpenSim.Region.ScriptEngine.Interfaces;
 using OpenSim.Region.ScriptEngine.Shared.Api.Interfaces;
 using TPFlags = OpenSim.Framework.Constants.TeleportFlags;
+using OpenSim.Services.Interfaces;
+using GridRegion = OpenSim.Services.Interfaces.GridRegion;
 using System.Text.RegularExpressions;
 
 using LSL_Float = OpenSim.Region.ScriptEngine.Shared.LSL_Types.LSLFloat;
@@ -591,7 +593,7 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
                     // agent must be over owners land to avoid abuse
                     if (m_host.OwnerID
                         == World.LandChannel.GetLandObject(
-                            presence.AbsolutePosition.X, presence.AbsolutePosition.Y).landData.OwnerID)
+                            presence.AbsolutePosition.X, presence.AbsolutePosition.Y).LandData.OwnerID)
                     {
 
                         // Check for hostname , attempt to make a hglink
@@ -599,17 +601,20 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
                         if (regionName.Contains(".") && regionName.Contains(":"))
                         {
                             // Try to link the region
-                            RegionInfo regInfo = HGHyperlink.TryLinkRegion(World,
-                                                               presence.ControllingClient,
-                                                               regionName);
-                            // Get the region name
-                            if (regInfo != null)
+                            IHyperlinkService hyperService = World.RequestModuleInterface<IHyperlinkService>();
+                            if (hyperService != null)
                             {
-                                regionName = regInfo.RegionName;
-                            }
-                            else
-                            {
-                                // Might need to ping the client here in case of failure??
+                                GridRegion regInfo = hyperService.TryLinkRegion(presence.ControllingClient,
+                                                                                regionName);
+                                // Get the region name
+                                if (regInfo != null)
+                                {
+                                    regionName = regInfo.RegionName;
+                                }
+                                else
+                                {
+                                    // Might need to ping the client here in case of failure??
+                                }
                             }
                         }
                         presence.ControllingClient.SendTeleportLocationStart();
@@ -642,7 +647,7 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
                     // agent must be over owners land to avoid abuse
                     if (m_host.OwnerID
                         == World.LandChannel.GetLandObject(
-                            presence.AbsolutePosition.X, presence.AbsolutePosition.Y).landData.OwnerID)
+                            presence.AbsolutePosition.X, presence.AbsolutePosition.Y).LandData.OwnerID)
                     {
                         presence.ControllingClient.SendTeleportLocationStart();
                         World.RequestTeleportLocation(presence.ControllingClient, regionHandle,
@@ -1159,10 +1164,39 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
             ILandObject land
                 = World.LandChannel.GetLandObject(m_host.AbsolutePosition.X, m_host.AbsolutePosition.Y);
 
-            if (land.landData.OwnerID != m_host.ObjectOwner)
+            if (land.LandData.OwnerID != m_host.ObjectOwner)
                 return;
 
             land.SetMediaUrl(url);
+        }
+        
+        public void osSetParcelSIPAddress(string SIPAddress)
+        {
+            // What actually is the difference to the LL function?
+            //
+            CheckThreatLevel(ThreatLevel.VeryLow, "osSetParcelMediaURL");
+
+            m_host.AddScriptLPS(1);
+            
+
+            ILandObject land
+                = World.LandChannel.GetLandObject(m_host.AbsolutePosition.X, m_host.AbsolutePosition.Y);
+
+            if (land.LandData.OwnerID != m_host.ObjectOwner)
+            {
+                OSSLError("osSetParcelSIPAddress: Sorry, you need to own the land to use this function");
+                return;
+            }
+            
+            // get the voice module
+            IVoiceModule voiceModule = World.RequestModuleInterface<IVoiceModule>();
+            
+            if (voiceModule != null) 
+                voiceModule.setLandSIPAddress(SIPAddress,land.LandData.GlobalID);
+            else
+                OSSLError("osSetParcelSIPAddress: No voice module enabled for this land");
+            
+            
         }
 
         public string osGetScriptEngineName()
@@ -1457,7 +1491,7 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
             notecardData = "Linden text version 2\n{\nLLEmbeddedItems version 1\n{\ncount 0\n}\nText length "
             + textLength.ToString() + "\n" + notecardData + "}\n";
 
-            asset.Data = Encoding.UTF8.GetBytes(notecardData);
+            asset.Data = Util.UTF8.GetBytes(notecardData);
             World.AssetService.Store(asset);
 
             // Create Task Entry

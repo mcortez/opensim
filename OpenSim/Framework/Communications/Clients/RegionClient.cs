@@ -35,6 +35,8 @@ using System.Text;
 using OpenMetaverse;
 using OpenMetaverse.StructuredData;
 
+using GridRegion = OpenSim.Services.Interfaces.GridRegion;
+
 using log4net;
 
 namespace OpenSim.Framework.Communications.Clients
@@ -43,7 +45,7 @@ namespace OpenSim.Framework.Communications.Clients
     {
         private static readonly ILog m_log = LogManager.GetLogger(MethodBase.GetCurrentMethod().DeclaringType);
 
-        public bool DoCreateChildAgentCall(RegionInfo region, AgentCircuitData aCircuit, string authKey, out string reason)
+        public bool DoCreateChildAgentCall(GridRegion region, AgentCircuitData aCircuit, string authKey, out string reason)
         {
             reason = String.Empty;
 
@@ -104,7 +106,6 @@ namespace OpenSim.Framework.Communications.Clients
                 AgentCreateRequest.ContentLength = buffer.Length;   //Count bytes to send
                 os = AgentCreateRequest.GetRequestStream();
                 os.Write(buffer, 0, strBuffer.Length);         //Send it
-                os.Close();
                 //m_log.InfoFormat("[REST COMMS]: Posted CreateChildAgent request to remote sim {0}", uri);
             }
             //catch (WebException ex)
@@ -113,6 +114,11 @@ namespace OpenSim.Framework.Communications.Clients
                 //m_log.InfoFormat("[REST COMMS]: Bad send on ChildAgentUpdate {0}", ex.Message);
                 reason = "cannot contact remote region";
                 return false;
+            }
+            finally
+            {
+                if (os != null)
+                    os.Close();
             }
 
             // Let's wait for the response
@@ -166,7 +172,7 @@ namespace OpenSim.Framework.Communications.Clients
 
         }
 
-        public bool DoChildAgentUpdateCall(RegionInfo region, IAgentData cAgentData)
+        public bool DoChildAgentUpdateCall(GridRegion region, IAgentData cAgentData)
         {
             // Eventually, we want to use a caps url instead of the agentID
             string uri = string.Empty;
@@ -222,7 +228,6 @@ namespace OpenSim.Framework.Communications.Clients
                 ChildUpdateRequest.ContentLength = buffer.Length;   //Count bytes to send
                 os = ChildUpdateRequest.GetRequestStream();
                 os.Write(buffer, 0, strBuffer.Length);         //Send it
-                os.Close();
                 //m_log.InfoFormat("[REST COMMS]: Posted ChildAgentUpdate request to remote sim {0}", uri);
             }
             //catch (WebException ex)
@@ -231,6 +236,11 @@ namespace OpenSim.Framework.Communications.Clients
                 //m_log.InfoFormat("[REST COMMS]: Bad send on ChildAgentUpdate {0}", ex.Message);
 
                 return false;
+            }
+            finally
+            {
+                if (os != null)
+                    os.Close();
             }
 
             // Let's wait for the response
@@ -260,7 +270,7 @@ namespace OpenSim.Framework.Communications.Clients
             return true;
         }
 
-        public bool DoRetrieveRootAgentCall(RegionInfo region, UUID id, out IAgentData agent)
+        public bool DoRetrieveRootAgentCall(GridRegion region, UUID id, out IAgentData agent)
         {
             agent = null;
             // Eventually, we want to use a caps url instead of the agentID
@@ -348,7 +358,7 @@ namespace OpenSim.Framework.Communications.Clients
         }
 
 
-        public bool DoCloseAgentCall(RegionInfo region, UUID id)
+        public bool DoCloseAgentCall(GridRegion region, UUID id)
         {
             string uri = string.Empty;
             try
@@ -391,7 +401,7 @@ namespace OpenSim.Framework.Communications.Clients
             return true;
         }
 
-        public bool DoCreateObjectCall(RegionInfo region, ISceneObject sog, string sogXml2, bool allowScriptCrossing)
+        public bool DoCreateObjectCall(GridRegion region, ISceneObject sog, string sogXml2, bool allowScriptCrossing)
         {
             ulong regionHandle = GetRegionHandle(region.RegionHandle);
             string uri 
@@ -435,7 +445,6 @@ namespace OpenSim.Framework.Communications.Clients
                 ObjectCreateRequest.ContentLength = buffer.Length;   //Count bytes to send
                 os = ObjectCreateRequest.GetRequestStream();
                 os.Write(buffer, 0, strBuffer.Length);         //Send it
-                os.Close();
                 m_log.InfoFormat("[REST COMMS]: Posted ChildAgentUpdate request to remote sim {0}", uri);
             }
             //catch (WebException ex)
@@ -444,6 +453,11 @@ namespace OpenSim.Framework.Communications.Clients
                 // m_log.InfoFormat("[REST COMMS]: Bad send on CreateObject {0}", ex.Message);
 
                 return false;
+            }
+            finally
+            {
+                if (os != null)
+                    os.Close();
             }
 
             // Let's wait for the response
@@ -474,7 +488,7 @@ namespace OpenSim.Framework.Communications.Clients
 
         }
 
-        public bool DoCreateObjectCall(RegionInfo region, UUID userID, UUID itemID)
+        public bool DoCreateObjectCall(GridRegion region, UUID userID, UUID itemID)
         {
             ulong regionHandle = GetRegionHandle(region.RegionHandle);
             string uri = "http://" + region.ExternalEndPoint.Address + ":" + region.HttpPort + "/object/" + UUID.Zero + "/" + regionHandle.ToString() + "/";
@@ -510,7 +524,6 @@ namespace OpenSim.Framework.Communications.Clients
                 ObjectCreateRequest.ContentLength = buffer.Length;   //Count bytes to send
                 os = ObjectCreateRequest.GetRequestStream();
                 os.Write(buffer, 0, strBuffer.Length);         //Send it
-                os.Close();
                 //m_log.InfoFormat("[REST COMMS]: Posted CreateObject request to remote sim {0}", uri);
             }
             //catch (WebException ex)
@@ -519,6 +532,11 @@ namespace OpenSim.Framework.Communications.Clients
                 // m_log.InfoFormat("[REST COMMS]: Bad send on CreateObject {0}", ex.Message);
 
                 return false;
+            }
+            finally
+            {
+                if (os != null)
+                    os.Close();
             }
 
             // Let's wait for the response
@@ -595,7 +613,6 @@ namespace OpenSim.Framework.Communications.Clients
                 HelloNeighbourRequest.ContentLength = buffer.Length;   //Count bytes to send
                 os = HelloNeighbourRequest.GetRequestStream();
                 os.Write(buffer, 0, strBuffer.Length);         //Send it
-                os.Close();
                 //m_log.InfoFormat("[REST COMMS]: Posted HelloNeighbour request to remote sim {0}", uri);
             }
             //catch (WebException ex)
@@ -605,7 +622,11 @@ namespace OpenSim.Framework.Communications.Clients
 
                 return false;
             }
-
+            finally
+            {
+                if (os != null)
+                    os.Close();
+            }
             // Let's wait for the response
             //m_log.Info("[REST COMMS]: Waiting for a reply after DoHelloNeighbourCall");
 
@@ -646,7 +667,7 @@ namespace OpenSim.Framework.Communications.Clients
             return false;
         }
 
-        public virtual void SendUserInformation(RegionInfo regInfo, AgentCircuitData aCircuit)
+        public virtual void SendUserInformation(GridRegion regInfo, AgentCircuitData aCircuit)
         {
         }
 

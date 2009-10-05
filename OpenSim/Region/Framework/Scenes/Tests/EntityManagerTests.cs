@@ -44,7 +44,7 @@ namespace OpenSim.Region.Framework.Scenes.Tests
 {
     [TestFixture, LongRunning]
     public class EntityManagerTests
-    {        
+    {
         static public Random random;
         SceneObjectGroup found;
         Scene scene = SceneSetupHelpers.SetupScene();
@@ -81,13 +81,13 @@ namespace OpenSim.Region.Framework.Scenes.Tests
 
             Assert.That(entman.ContainsKey(obj1), Is.False);
             Assert.That(entman.ContainsKey(li1), Is.False);
-            Assert.That(entman.ContainsKey(obj2), Is.False);            
-            Assert.That(entman.ContainsKey(li2), Is.False);            
+            Assert.That(entman.ContainsKey(obj2), Is.False);
+            Assert.That(entman.ContainsKey(li2), Is.False);
         }
 
         [Test]
         public void T011_ThreadAddRemoveTest()
-        {   
+        {
             TestHelper.InMethod();
             // Console.WriteLine("Beginning test {0}", MethodBase.GetCurrentMethod());
             
@@ -128,7 +128,6 @@ namespace OpenSim.Region.Framework.Scenes.Tests
 
         private SceneObjectGroup NewSOG()
         {
-            SceneObjectGroup sog = new SceneObjectGroup();
             SceneObjectPart sop = new SceneObjectPart(UUID.Random(), PrimitiveBaseShape.Default, Vector3.Zero, Quaternion.Identity, Vector3.Zero);
             sop.Name = RandomName();
             sop.Description = sop.Name;
@@ -136,9 +135,8 @@ namespace OpenSim.Region.Framework.Scenes.Tests
             sop.SitName = RandomName();
             sop.TouchName = RandomName();
             sop.ObjectFlags |= (uint)PrimFlags.Phantom;
-            
-            sog.SetRootPart(sop);
 
+            SceneObjectGroup sog = new SceneObjectGroup(sop);
             scene.AddNewSceneObject(sog, false);
             
             return sog;
@@ -150,12 +148,12 @@ namespace OpenSim.Region.Framework.Scenes.Tests
             int size = random.Next(40,80); 
             char ch ;
             for (int i=0; i<size; i++)
-            {       
+            {
                 ch = Convert.ToChar(Convert.ToInt32(Math.Floor(26 * random.NextDouble() + 65))) ;
                 name.Append(ch);
             }
             return name.ToString();
-        }        
+        }
     }
 
     public class NewTestThreads
@@ -181,4 +179,4 @@ namespace OpenSim.Region.Framework.Scenes.Tests
             entman.Remove(sog.UUID);
         }
     }
-}    
+}

@@ -348,8 +348,6 @@ namespace OpenSim.Data.MSSQL
                 //Delete the actual row
                 DeleteOneFolder(folderID, connection);
                 DeleteItemsInFolder(folderID, connection);
-
-                connection.Close();
             }
         }
 
@@ -428,7 +426,7 @@ namespace OpenSim.Data.MSSQL
                              @inventoryBasePermissions, @inventoryEveryOnePermissions, @inventoryGroupPermissions, @salePrice, @saleType,
                              @creationDate, @groupID, @groupOwned, @flags)";
             
-            string itemName = item.Name;            
+            string itemName = item.Name;
             if (item.Name.Length > 64)
             {
                 itemName = item.Name.Substring(0, 64);
@@ -529,7 +527,7 @@ namespace OpenSim.Data.MSSQL
             {
                 itemDesc = item.Description.Substring(0, 128);
                 m_log.Warn("[INVENTORY DB]: Description field truncated from " + item.Description.Length.ToString() + " to " + itemDesc.Length.ToString() + " characters on update");
-            }            
+            }
             
             using (AutoClosingSqlCommand command = database.Query(sql))
             {

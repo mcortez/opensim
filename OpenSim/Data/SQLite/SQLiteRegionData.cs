@@ -336,7 +336,7 @@ namespace OpenSim.Data.SQLite
         /// <param name="regionUUID">the region UUID</param>
         public void RemoveObject(UUID obj, UUID regionUUID)
         {
-            m_log.InfoFormat("[REGION DB]: Removing obj: {0} from region: {1}", obj.Guid, regionUUID);
+            // m_log.InfoFormat("[REGION DB]: Removing obj: {0} from region: {1}", obj.Guid, regionUUID);
 
             DataTable prims = ds.Tables["prims"];
             DataTable shapes = ds.Tables["primshapes"];
@@ -416,7 +416,6 @@ namespace OpenSim.Data.SQLite
                         
                         if (uuid == objID) //is new SceneObjectGroup ?
                         {
-                            SceneObjectGroup group = new SceneObjectGroup();
                             prim = buildPrim(primRow);
                             DataRow shapeRow = shapes.Rows.Find(prim.UUID.ToString());
                             if (shapeRow != null)
@@ -430,7 +429,7 @@ namespace OpenSim.Data.SQLite
                                 prim.Shape = PrimitiveBaseShape.Default;
                             }
                             
-                            group.SetRootPart(prim);
+                            SceneObjectGroup group = new SceneObjectGroup(prim);
                             createdObjects.Add(group.UUID, group);
                             retvals.Add(group);
                             LoadItems(prim);
@@ -497,7 +496,7 @@ namespace OpenSim.Data.SQLite
         {
             //m_log.DebugFormat("[DATASTORE]: Loading inventory for {0}, {1}", prim.Name, prim.UUID);
     
-            DataTable dbItems = ds.Tables["primitems"];          
+            DataTable dbItems = ds.Tables["primitems"];
             String sql = String.Format("primID = '{0}'", prim.UUID.ToString());
             DataRow[] dbItemRows = dbItems.Select(sql);
             IList<TaskInventoryItem> inventory = new List<TaskInventoryItem>();
@@ -582,13 +581,17 @@ namespace OpenSim.Data.SQLite
                         if (row.Read())
                         {
                             // TODO: put this into a function
-                            MemoryStream str = new MemoryStream((byte[]) row["Heightfield"]);
-                            BinaryReader br = new BinaryReader(str);
-                            for (int x = 0; x < (int)Constants.RegionSize; x++)
+                            using (MemoryStream str = new MemoryStream((byte[])row["Heightfield"]))
                             {
-                                for (int y = 0; y < (int)Constants.RegionSize; y++)
+                                using (BinaryReader br = new BinaryReader(str))
                                 {
-                                    terret[x, y] = br.ReadDouble();
+                                    for (int x = 0; x < (int)Constants.RegionSize; x++)
+                                    {
+                                        for (int y = 0; y < (int)Constants.RegionSize; y++)
+                                        {
+                                            terret[x, y] = br.ReadDouble();
+                                        }
+                                    }
                                 }
                             }
                             rev = (int) row["Revision"];
@@ -639,29 +642,29 @@ namespace OpenSim.Data.SQLite
                 DataTable land = ds.Tables["land"];
                 DataTable landaccesslist = ds.Tables["landaccesslist"];
 
-                DataRow landRow = land.Rows.Find(parcel.landData.GlobalID.ToString());
+                DataRow landRow = land.Rows.Find(parcel.LandData.GlobalID.ToString());
                 if (landRow == null)
                 {
                     landRow = land.NewRow();
-                    fillLandRow(landRow, parcel.landData, parcel.regionUUID);
+                    fillLandRow(landRow, parcel.LandData, parcel.RegionUUID);
                     land.Rows.Add(landRow);
                 }
                 else
                 {
-                    fillLandRow(landRow, parcel.landData, parcel.regionUUID);
+                    fillLandRow(landRow, parcel.LandData, parcel.RegionUUID);
                 }
 
                 // I know this caused someone issues before, but OpenSim is unusable if we leave this stuff around
                 using (SqliteCommand cmd = new SqliteCommand("delete from landaccesslist where LandUUID=:LandUUID", m_conn))
                 {
-                    cmd.Parameters.Add(new SqliteParameter(":LandUUID", parcel.landData.GlobalID.ToString()));
+                    cmd.Parameters.Add(new SqliteParameter(":LandUUID", parcel.LandData.GlobalID.ToString()));
                     cmd.ExecuteNonQuery();
                 }
 
-                foreach (ParcelManager.ParcelAccessEntry entry in parcel.landData.ParcelAccessList)
+                foreach (ParcelManager.ParcelAccessEntry entry in parcel.LandData.ParcelAccessList)
                 {
                     DataRow newAccessRow = landaccesslist.NewRow();
-                    fillLandAccessRow(newAccessRow, entry, parcel.landData.GlobalID);
+                    fillLandAccessRow(newAccessRow, entry, parcel.LandData.GlobalID);
                     landaccesslist.Rows.Add(newAccessRow);
                 }
             }

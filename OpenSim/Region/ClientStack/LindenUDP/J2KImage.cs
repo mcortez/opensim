@@ -38,173 +38,203 @@ using System.Reflection;
 namespace OpenSim.Region.ClientStack.LindenUDP
 {
     /// <summary>
-    /// We use this class to store image data and associated request data and attributes
+    /// Stores information about a current texture download and a reference to the texture asset
     /// </summary>
     public class J2KImage
     {
+        private const int IMAGE_PACKET_SIZE = 1000;
+        private const int FIRST_PACKET_SIZE = 600;
+
         private static readonly ILog m_log = LogManager.GetLogger(MethodBase.GetCurrentMethod().DeclaringType);
 
-        public double m_designatedPriorityKey;
-        public double m_requestedPriority = 0.0d;
-        public uint m_lastSequence = 0;
-        public uint m_requestedPacketNumber;
-        public sbyte m_requestedDiscardLevel;
-        public UUID m_requestedUUID;
-        public IJ2KDecoder m_j2kDecodeModule;
-        public IAssetService m_assetCache;
-        public OpenJPEG.J2KLayerInfo[] Layers = new OpenJPEG.J2KLayerInfo[0];
-        public AssetBase m_MissingSubstitute = null;
-        public bool m_decoded = false;
-        public bool m_completedSendAtCurrentDiscardLevel;
+        public uint LastSequence;
+        public float Priority;
+        public uint StartPacket;
+        public sbyte DiscardLevel;
+        public UUID TextureID;
+        public IJ2KDecoder J2KDecoder;
+        public IAssetService AssetService;
+        public OpenJPEG.J2KLayerInfo[] Layers;
+        public bool IsDecoded;
+        public bool HasAsset;
+        public C5.IPriorityQueueHandle<J2KImage> PriorityQueueHandle;
 
-        private sbyte m_discardLevel=-1;
-        private uint m_packetNumber;
-        private bool m_decoderequested = false;
-        private bool m_hasasset = false;
-        private bool m_asset_requested = false;
-        private bool m_sentinfo = false;
-        private uint m_stopPacket = 0;
-        private const int cImagePacketSize = 1000;
-        private const int cFirstPacketSize = 600;
-        private AssetBase m_asset = null;
-        private LLImageManager m_image;
-        public J2KImage(LLImageManager image)
+        private uint m_currentPacket;
+        private bool m_decodeRequested;
+        private bool m_assetRequested;
+        private bool m_sentInfo;
+        private uint m_stopPacket;
+        private byte[] m_asset;
+        private LLImageManager m_imageManager;
+
+        public J2KImage(LLImageManager imageManager)
         {
-            m_image = image;
+            m_imageManager = imageManager;
         }
 
-        public uint m_pPacketNumber
+        public bool SendPackets(LLClientView client, int maxpack)
         {
-            get { return m_packetNumber; }
-        }
-        public uint m_pStopPacketNumber
-        {
-            get { return m_stopPacket; }
-        }
-
-        public byte[] Data
-        {
-            get 
-            { 
-                if (m_asset != null) 
-                    return m_asset.Data; 
-                else
-                    return null;
-            }
-        }
-
-        public ushort TexturePacketCount()
-        {
-            if (!m_decoded)
-                return 0;
-            try
+            if (m_currentPacket <= m_stopPacket)
             {
-                return (ushort)(((m_asset.Data.Length - cFirstPacketSize + cImagePacketSize - 1) / cImagePacketSize) + 1);
+                bool SendMore = true;
+                if (!m_sentInfo || (m_currentPacket == 0))
+                {
+                    if (SendFirstPacket(client))
+                    {
+                        SendMore = false;
+                    }
+                    m_sentInfo = true;
+                    m_currentPacket++;
+                }
+                if (m_currentPacket < 2)
+                {
+                    m_currentPacket = 2;
+                }
+
+                int count = 0;
+                while (SendMore && count < maxpack && m_currentPacket <= m_stopPacket)
+                {
+                    count++;
+                    SendMore = SendPacket(client);
+                    m_currentPacket++;
+                }
+
+                if (m_currentPacket > m_stopPacket)
+                    return true;
             }
-            catch (Exception)
-            {
-                // If the asset is missing/destroyed/truncated, we will land
-                // here
-                //
-                return 0;
-            }
+
+            return false;
         }
 
-        public void J2KDecodedCallback(UUID AssetId, OpenJPEG.J2KLayerInfo[] layers)
+        public void RunUpdate()
         {
-           m_image.m_outstandingtextures++;
-           Layers = layers;
-           m_decoded = true;
-           RunUpdate();
-        }
+            //This is where we decide what we need to update
+            //and assign the real discardLevel and packetNumber
+            //assuming of course that the connected client might be bonkers
 
-        public void AssetDataCallback(UUID AssetID, AssetBase asset)
-        {
-            m_hasasset = true;
-            if (asset == null || asset.Data == null)
+            if (!HasAsset)
             {
-                m_asset = m_MissingSubstitute;
+                if (!m_assetRequested)
+                {
+                    m_assetRequested = true;
+                    AssetService.Get(TextureID.ToString(), this, AssetReceived);
+                }
             }
             else
             {
-                m_asset = asset;              
+                if (!IsDecoded)
+                {
+                    //We need to decode the requested image first
+                    if (!m_decodeRequested)
+                    {
+                        //Request decode
+                        m_decodeRequested = true;
+                        // Do we have a jpeg decoder?
+                        if (J2KDecoder != null)
+                        {
+                            if (m_asset == null)
+                            {
+                                J2KDecodedCallback(TextureID, new OpenJPEG.J2KLayerInfo[0]);
+                            }
+                            else
+                            {
+                                // Send it off to the jpeg decoder
+                                J2KDecoder.BeginDecode(TextureID, m_asset, J2KDecodedCallback);
+                            }
+
+                        }
+                        else
+                        {
+                            J2KDecodedCallback(TextureID, new OpenJPEG.J2KLayerInfo[0]);
+                        }
+                    }
+                }
+                else
+                {
+                    // Check for missing image asset data
+                    if (m_asset == null)
+                    {
+                        m_log.Warn("[J2KIMAGE]: RunUpdate() called with missing asset data (no missing image texture?). Canceling texture transfer");
+                        m_currentPacket = m_stopPacket;
+                        return;
+                    }
+                    
+                    if (DiscardLevel >= 0 || m_stopPacket == 0)
+                    {
+                        // This shouldn't happen, but if it does, we really can't proceed
+                        if (Layers == null)
+                        {
+                            m_log.Warn("[J2KIMAGE]: RunUpdate() called with missing Layers. Canceling texture transfer");
+                            m_currentPacket = m_stopPacket;
+                            return;
+                        }
+
+                        int maxDiscardLevel = Math.Max(0, Layers.Length - 1);
+
+                        // Treat initial texture downloads with a DiscardLevel of -1 a request for the highest DiscardLevel
+                        if (DiscardLevel < 0 && m_stopPacket == 0)
+                            DiscardLevel = (sbyte)maxDiscardLevel;
+
+                        // Clamp at the highest discard level
+                        DiscardLevel = (sbyte)Math.Min(DiscardLevel, maxDiscardLevel);
+
+                        //Calculate the m_stopPacket
+                        if (Layers.Length > 0)
+                        {
+                            m_stopPacket = (uint)GetPacketForBytePosition(Layers[(Layers.Length - 1) - DiscardLevel].End);
+                            //I don't know why, but the viewer seems to expect the final packet if the file
+                            //is just one packet bigger.
+                            if (TexturePacketCount() == m_stopPacket + 1)
+                            {
+                                m_stopPacket = TexturePacketCount();
+                            }
+                        }
+                        else
+                        {
+                            m_stopPacket = TexturePacketCount();
+                        }
+
+                        m_currentPacket = StartPacket;
+                    }
+
+                    if ((m_imageManager != null) && (m_imageManager.Client != null) && (m_imageManager.Client.PacketHandler != null))
+                        if (m_imageManager.Client.PacketHandler.GetQueueCount(ThrottleOutPacketType.Texture) == 0)
+                        {
+                            //m_log.Debug("No textures queued, sending one packet to kickstart it");
+                            SendPacket(m_imageManager.Client);
+                        }
+                }
             }
-            RunUpdate();
         }
 
-        protected void AssetReceived(string id, Object sender, AssetBase asset)
+        private bool SendFirstPacket(LLClientView client)
         {
-            UUID assetID = UUID.Zero;
-            if (asset != null)
-                assetID = asset.FullID;
-
-            AssetDataCallback(assetID, asset);
-
-        }
-
-        private int GetPacketForBytePosition(int bytePosition)
-        {
-            return ((bytePosition - cFirstPacketSize + cImagePacketSize - 1) / cImagePacketSize) + 1;
-        }
-
-        public int LastPacketSize()
-        {
-            if (m_packetNumber == 1)
-                return m_asset.Data.Length;
-            int lastsize = (m_asset.Data.Length - cFirstPacketSize) % cImagePacketSize;
-            //If the last packet size is zero, it's really cImagePacketSize, it sits on the boundary
-            if (lastsize == 0)
+            if (m_asset == null)
             {
-                lastsize = cImagePacketSize;
-            }
-            return lastsize;
-        }
- 
-        public int CurrentBytePosition()
-        {
-            if (m_packetNumber == 0)
-                return 0;
-            if (m_packetNumber == 1)
-                return cFirstPacketSize;
-
-            int result = cFirstPacketSize + ((int)m_packetNumber - 2) * cImagePacketSize;
-            if (result < 0)
-            {
-                result = cFirstPacketSize;
-            }
-            return result;
-        }
-
-        public bool SendFirstPacket(LLClientView client)
-        {
-            // this means we don't have 
-            if (Data == null) 
-            {
-                client.SendImageNotFound(m_requestedUUID);
-                m_log.WarnFormat("[TEXTURE]: Got null Data element on a asset {0}..  and the missing image Data property is al", m_requestedUUID);
+                m_log.Warn("[J2KIMAGE]: Sending ImageNotInDatabase for texture " + TextureID);
+                client.SendImageNotFound(TextureID);
                 return true;
             }
-            // Do we have less then 1 packet's worth of data?
-            else if (m_asset.Data.Length <= cFirstPacketSize)
+            else if (m_asset.Length <= FIRST_PACKET_SIZE)
             {
-                // Send only 1 packet
-                client.SendImageFirstPart(1, m_requestedUUID, (uint)m_asset.Data.Length, m_asset.Data, 2);
+                // We have less then one packet's worth of data
+                client.SendImageFirstPart(1, TextureID, (uint)m_asset.Length, m_asset, 2);
                 m_stopPacket = 0;
                 return true;
             }
             else
             {
-                byte[] firstImageData = new byte[cFirstPacketSize];
-                try 
-                { 
-                    Buffer.BlockCopy(m_asset.Data, 0, firstImageData, 0, (int)cFirstPacketSize);
-                    client.SendImageFirstPart(TexturePacketCount(), m_requestedUUID, (uint)m_asset.Data.Length, firstImageData, 2);                
-                }
+                // This is going to be a multi-packet texture download
+                byte[] firstImageData = new byte[FIRST_PACKET_SIZE];
+
+                try { Buffer.BlockCopy(m_asset, 0, firstImageData, 0, FIRST_PACKET_SIZE); }
                 catch (Exception)
                 {
-                    m_log.Error("Texture block copy failed. Possibly out of memory?");
+                    m_log.ErrorFormat("[J2KIMAGE]: Texture block copy for the first packet failed. textureid={0}, assetlength={1}", TextureID, m_asset.Length);
                     return true;
                 }
+
+                client.SendImageFirstPart(TexturePacketCount(), TextureID, (uint)m_asset.Length, firstImageData, (byte)ImageCodec.J2C);
             }
             return false;
         }
@@ -212,17 +242,17 @@ namespace OpenSim.Region.ClientStack.LindenUDP
         private bool SendPacket(LLClientView client)
         {
             bool complete = false;
-            int imagePacketSize = ((int)m_packetNumber == (TexturePacketCount())) ? LastPacketSize() : cImagePacketSize;
+            int imagePacketSize = ((int)m_currentPacket == (TexturePacketCount())) ? LastPacketSize() : IMAGE_PACKET_SIZE;
 
             try
             {
-                if ((CurrentBytePosition() + cImagePacketSize) > m_asset.Data.Length)
+                if ((CurrentBytePosition() + IMAGE_PACKET_SIZE) > m_asset.Length)
                 {
                     imagePacketSize = LastPacketSize();
-                    complete=true;
-                    if ((CurrentBytePosition() + imagePacketSize) > m_asset.Data.Length)
+                    complete = true;
+                    if ((CurrentBytePosition() + imagePacketSize) > m_asset.Length)
                     {
-                        imagePacketSize = m_asset.Data.Length - CurrentBytePosition();
+                        imagePacketSize = m_asset.Length - CurrentBytePosition();
                         complete = true;
                     }
                 }
@@ -233,170 +263,114 @@ namespace OpenSim.Region.ClientStack.LindenUDP
                 if (imagePacketSize > 0)
                 {
                     byte[] imageData = new byte[imagePacketSize];
-                    try
-                    {
-                        Buffer.BlockCopy(m_asset.Data, CurrentBytePosition(), imageData, 0, imagePacketSize);
-                    }
+                    int currentPosition = CurrentBytePosition();
+
+                    try { Buffer.BlockCopy(m_asset, currentPosition, imageData, 0, imagePacketSize); }
                     catch (Exception e)
                     {
-                        m_log.Error("Error copying texture block. Out of memory? imagePacketSize was " + imagePacketSize.ToString() + " on packet " + m_packetNumber.ToString() + " out of " + m_stopPacket.ToString() + ". Exception: " + e.ToString());
+                        m_log.ErrorFormat("[J2KIMAGE]: Texture block copy for the first packet failed. textureid={0}, assetlength={1}, currentposition={2}, imagepacketsize={3}, exception={4}",
+                            TextureID, m_asset.Length, currentPosition, imagePacketSize, e.Message);
                         return false;
                     }
 
                     //Send the packet
-                    client.SendImageNextPart((ushort)(m_packetNumber-1), m_requestedUUID, imageData);
+                    client.SendImageNextPart((ushort)(m_currentPacket - 1), TextureID, imageData);
                 }
-                if (complete)
-                {
-                    return false;
-                }
-                else
-                {
-                    return true;
-                }
+
+                return !complete;
             }
             catch (Exception)
             {
                 return false;
             }
         }
-        public bool SendPackets(LLClientView client, int maxpack)
+
+        private ushort TexturePacketCount()
         {
+            if (!IsDecoded)
+                return 0;
 
-            if (!m_completedSendAtCurrentDiscardLevel)
-            {
-                if (m_packetNumber <= m_stopPacket)
-                {
-                    bool SendMore = true;
-                    if (!m_sentinfo || (m_packetNumber == 0))
-                    {
-                        if (SendFirstPacket(client))
-                        {
-                            SendMore = false;
-                        }
-                        m_sentinfo = true;
-                        m_packetNumber++;
-                    }
-                    // bool ignoreStop = false;
-                    if (m_packetNumber < 2)
-                    {
-                        m_packetNumber = 2;
-                    }
+            if (m_asset == null)
+                return 0;
 
-                    int count = 0;
-                    while (SendMore && count < maxpack && m_packetNumber <= m_stopPacket)
-                    {
-                        count++;
-                        SendMore = SendPacket(client);
-                        m_packetNumber++;
-                    }
+            if (m_asset.Length <= FIRST_PACKET_SIZE)
+                return 1;
 
-                    if (m_packetNumber > m_stopPacket)
-                    {
-                        return true;
-                    }
-                }
-            }
-            return false;
+            return (ushort)(((m_asset.Length - FIRST_PACKET_SIZE + IMAGE_PACKET_SIZE - 1) / IMAGE_PACKET_SIZE) + 1);
         }
 
-        public void RunUpdate()
+        private int GetPacketForBytePosition(int bytePosition)
         {
-            //This is where we decide what we need to update
-            //and assign the real discardLevel and packetNumber
-            //assuming of course that the connected client might be bonkers
+            return ((bytePosition - FIRST_PACKET_SIZE + IMAGE_PACKET_SIZE - 1) / IMAGE_PACKET_SIZE) + 1;
+        }
 
-            if (!m_hasasset)
+        private int LastPacketSize()
+        {
+            if (m_currentPacket == 1)
+                return m_asset.Length;
+            int lastsize = (m_asset.Length - FIRST_PACKET_SIZE) % IMAGE_PACKET_SIZE;
+            //If the last packet size is zero, it's really cImagePacketSize, it sits on the boundary
+            if (lastsize == 0)
             {
-
-                if (!m_asset_requested)
-                {
-                    m_asset_requested = true;
-                    m_assetCache.Get(m_requestedUUID.ToString(), this, AssetReceived);
-
-                }
-
+                lastsize = IMAGE_PACKET_SIZE;
             }
-            else
+            return lastsize;
+        }
+
+        private int CurrentBytePosition()
+        {
+            if (m_currentPacket == 0)
+                return 0;
+            if (m_currentPacket == 1)
+                return FIRST_PACKET_SIZE;
+
+            int result = FIRST_PACKET_SIZE + ((int)m_currentPacket - 2) * IMAGE_PACKET_SIZE;
+            if (result < 0)
             {
+                result = FIRST_PACKET_SIZE;
+            }
+            return result;
+        }
 
+        private void J2KDecodedCallback(UUID AssetId, OpenJPEG.J2KLayerInfo[] layers)
+        {
+            Layers = layers;
+            IsDecoded = true;
+            RunUpdate();
+        }
 
-                if (!m_decoded)
+        private void AssetDataCallback(UUID AssetID, AssetBase asset)
+        {
+            HasAsset = true;
+
+            if (asset == null || asset.Data == null)
+            {
+                if (m_imageManager.MissingImage != null)
                 {
-                    //We need to decode the requested image first
-                    if (!m_decoderequested)
-                    {
-                        //Request decode
-                        m_decoderequested = true;
-                        // Do we have a jpeg decoder?
-                        if (m_j2kDecodeModule != null)
-                        {
-                            if (Data == null)
-                            {
-                                J2KDecodedCallback(m_requestedUUID, new OpenJPEG.J2KLayerInfo[0]);
-                            }
-                            // Send it off to the jpeg decoder
-                            m_j2kDecodeModule.decode(m_requestedUUID, Data, J2KDecodedCallback);
-
-                        }
-                        else
-                        {
-                            J2KDecodedCallback(m_requestedUUID, new OpenJPEG.J2KLayerInfo[0]);
-                        }
-                    }
-
+                    m_asset = m_imageManager.MissingImage.Data;
                 }
                 else
                 {
-                    //discardLevel of -1 means just update the priority
-                    if (m_requestedDiscardLevel != -1)
-                    {
-                        //Evaluate the discard level
-                        //First, is it positive?
-                        if (m_requestedDiscardLevel >= 0)
-                        {
-                            if (m_requestedDiscardLevel > Layers.Length - 1)
-                            {
-                                m_discardLevel = (sbyte)(Layers.Length - 1);
-                            }
-                            else
-                            {
-                                m_discardLevel = m_requestedDiscardLevel;
-                            }
-
-                            //Calculate the m_stopPacket
-                            if (Layers.Length > 0)
-                            {
-                                m_stopPacket = (uint)GetPacketForBytePosition(Layers[(Layers.Length - 1) - m_discardLevel].End);
-                                //I don't know why, but the viewer seems to expect the final packet if the file
-                                //is just one packet bigger.
-                                if (TexturePacketCount() == m_stopPacket + 1)
-                                {
-                                    m_stopPacket = TexturePacketCount();
-                                }
-                            }
-                            else
-                            {
-                                m_stopPacket = TexturePacketCount();
-                            }
-                            //Don't reset packet number unless we're waiting or it's ahead of us
-                            if (m_completedSendAtCurrentDiscardLevel || m_requestedPacketNumber>m_packetNumber)
-                            {
-                                m_packetNumber = m_requestedPacketNumber;
-                            }
-
-                            if (m_packetNumber <= m_stopPacket)
-                            {
-                                m_completedSendAtCurrentDiscardLevel = false;
-                            }
-                        }
-                    }
-                    else
-                    {
-                        m_packetNumber = m_stopPacket;
-                    }
+                    m_asset = null;
+                    IsDecoded = true;
                 }
             }
+            else
+            {
+                m_asset = asset.Data;
+            }
+
+            RunUpdate();
+        }
+
+        private void AssetReceived(string id, Object sender, AssetBase asset)
+        {
+            UUID assetID = UUID.Zero;
+            if (asset != null)
+                assetID = asset.FullID;
+
+            AssetDataCallback(assetID, asset);
+
         }
     }
 }

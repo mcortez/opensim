@@ -24,7 +24,7 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-
+ 
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -50,6 +50,9 @@ using OpenSim.Region.ScriptEngine.Shared.Api.Plugins;
 using OpenSim.Region.ScriptEngine.Shared.ScriptBase;
 using OpenSim.Region.ScriptEngine.Interfaces;
 using OpenSim.Region.ScriptEngine.Shared.Api.Interfaces;
+using OpenSim.Services.Interfaces;
+
+using GridRegion = OpenSim.Services.Interfaces.GridRegion;
 
 using AssetLandmark = OpenSim.Framework.AssetLandmark;
 
@@ -3896,7 +3899,7 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
                 {
                     // agent must be over the owners land
                     if (m_host.OwnerID == World.LandChannel.GetLandObject(
-                            presence.AbsolutePosition.X, presence.AbsolutePosition.Y).landData.OwnerID)
+                            presence.AbsolutePosition.X, presence.AbsolutePosition.Y).LandData.OwnerID)
                     {
                         presence.ControllingClient.SendTeleportLocationStart();
                         World.TeleportClientHome(agentId, presence.ControllingClient);
@@ -4088,7 +4091,8 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
                         return;
 
                     // Need provisions for Group Owned here
-                    if (m_host.OwnerID == targetlandObj.landData.OwnerID || targetlandObj.landData.IsGroupOwned || m_host.OwnerID == targetID)
+                    if (m_host.OwnerID == targetlandObj.LandData.OwnerID || 
+                        targetlandObj.LandData.IsGroupOwned || m_host.OwnerID == targetID)
                     {
                         pushAllowed = true;
                     }
@@ -4104,10 +4108,12 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
                     else
                     {
                         // Parcel push restriction
-                        if ((targetlandObj.landData.Flags & (uint)ParcelFlags.RestrictPushObject) == (uint)ParcelFlags.RestrictPushObject)
+                        if ((targetlandObj.LandData.Flags & (uint)ParcelFlags.RestrictPushObject) == (uint)ParcelFlags.RestrictPushObject)
                         {
                             // Need provisions for Group Owned here
-                            if (m_host.OwnerID == targetlandObj.landData.OwnerID || targetlandObj.landData.IsGroupOwned || m_host.OwnerID == targetID)
+                            if (m_host.OwnerID == targetlandObj.LandData.OwnerID || 
+                                targetlandObj.LandData.IsGroupOwned || 
+                                m_host.OwnerID == targetID)
                             {
                                 pushAllowed = true;
                             }
@@ -4996,6 +5002,9 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
             if (end > src.Length)
                 end = src.Length;
 
+            if (stride == 0)
+                stride = 1;
+
             //  There may be one or two ranges to be considered
 
             if (start != end)
@@ -5022,9 +5031,6 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
                 //  A negative stride reverses the direction of the
                 //  scan producing an inverted list as a result.
 
-                if (stride == 0)
-                    stride = 1;
-
                 if (stride > 0)
                 {
                     for (int i = 0; i < src.Length; i += stride)
@@ -5048,7 +5054,10 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
             }
             else
             {
-                result.Add(src.Data[start]);
+                if (start%stride == 0)
+                {
+                    result.Add(src.Data[start]);
+                }
             }
 
             return result;
@@ -5226,12 +5235,12 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
                 }
             }
 
-            List<SimpleRegionInfo> neighbors = World.CommsManager.GridService.RequestNeighbours(World.RegionInfo.RegionLocX, World.RegionInfo.RegionLocY);
+            List<GridRegion> neighbors = World.GridService.GetNeighbours(World.RegionInfo.ScopeID, World.RegionInfo.RegionID);
 
             uint neighborX = World.RegionInfo.RegionLocX + (uint)dir.x;
             uint neighborY = World.RegionInfo.RegionLocY + (uint)dir.y;
 
-            foreach (SimpleRegionInfo sri in neighbors)
+            foreach (GridRegion sri in neighbors)
             {
                 if (sri.RegionLocX == neighborX && sri.RegionLocY == neighborY)
                     return 0;
@@ -5436,7 +5445,7 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
                 {
                     // agent must be over the owners land
                     if (m_host.OwnerID == World.LandChannel.GetLandObject(
-                            presence.AbsolutePosition.X, presence.AbsolutePosition.Y).landData.OwnerID)
+                            presence.AbsolutePosition.X, presence.AbsolutePosition.Y).LandData.OwnerID)
                         World.TeleportClientHome(agentId, presence.ControllingClient);
                 }
             }
@@ -5526,7 +5535,7 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
                 {
                     if (m_host.OwnerID
                         == World.LandChannel.GetLandObject(
-                            presence.AbsolutePosition.X, presence.AbsolutePosition.Y).landData.OwnerID)
+                            presence.AbsolutePosition.X, presence.AbsolutePosition.Y).LandData.OwnerID)
                         return 1;
                 }
                 else // object is not an avatar
@@ -5535,7 +5544,7 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
                     if (obj != null)
                         if (m_host.OwnerID
                             == World.LandChannel.GetLandObject(
-                                obj.AbsolutePosition.X, obj.AbsolutePosition.Y).landData.OwnerID)
+                                obj.AbsolutePosition.X, obj.AbsolutePosition.Y).LandData.OwnerID)
                             return 1;
                 }
             }
@@ -5546,7 +5555,7 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
         public LSL_String llGetLandOwnerAt(LSL_Vector pos)
         {
             m_host.AddScriptLPS(1);
-            return World.LandChannel.GetLandObject((float)pos.x, (float)pos.y).landData.OwnerID.ToString();
+            return World.LandChannel.GetLandObject((float)pos.x, (float)pos.y).LandData.OwnerID.ToString();
         }
 
         /// <summary>
@@ -5615,9 +5624,9 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
                         ILandObject parcel = World.LandChannel.GetLandObject(av.AbsolutePosition.X, av.AbsolutePosition.Y);
                         if (parcel != null)
                         {
-                            if (m_host.ObjectOwner == parcel.landData.OwnerID ||
-                                (m_host.OwnerID == m_host.GroupID && m_host.GroupID == parcel.landData.GroupID
-                                && parcel.landData.IsGroupOwned) || World.Permissions.IsGod(m_host.OwnerID))
+                            if (m_host.ObjectOwner == parcel.LandData.OwnerID ||
+                                (m_host.OwnerID == m_host.GroupID && m_host.GroupID == parcel.LandData.GroupID
+                                && parcel.LandData.IsGroupOwned) || World.Permissions.IsGod(m_host.OwnerID))
                             {
                                 av.StandUp();
                             }
@@ -6120,7 +6129,7 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
         {
             m_host.AddScriptLPS(1);
             UUID key;
-            LandData land = World.LandChannel.GetLandObject(m_host.AbsolutePosition.X, m_host.AbsolutePosition.Y).landData;
+            LandData land = World.LandChannel.GetLandObject(m_host.AbsolutePosition.X, m_host.AbsolutePosition.Y).LandData;
             if (land.OwnerID == m_host.OwnerID)
             {
                 ParcelManager.ParcelAccessEntry entry = new ParcelManager.ParcelAccessEntry();
@@ -6321,9 +6330,13 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
                 UUID channelID = xmlrpcMod.OpenXMLRPCChannel(m_localID, m_itemID, UUID.Zero);
                 IXmlRpcRouter xmlRpcRouter = m_ScriptEngine.World.RequestModuleInterface<IXmlRpcRouter>();
                 if (xmlRpcRouter != null)
+                {
+                    string ExternalHostName = m_ScriptEngine.World.RegionInfo.ExternalHostName;
+                    
                     xmlRpcRouter.RegisterNewReceiver(m_ScriptEngine.ScriptModule, channelID, m_host.UUID, 
-                                                     m_itemID, String.Format("http://{0}:{1}/", System.Environment.MachineName, 
+                                                     m_itemID, String.Format("http://{0}:{1}/", ExternalHostName, 
                                                                              xmlrpcMod.Port.ToString()));
+                }
                 object[] resobj = new object[] 
                     { 
                         new LSL_Integer(1), 
@@ -7064,7 +7077,7 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
             try
             {
                 byte[] encData_byte = new byte[str.Length];
-                encData_byte = Encoding.UTF8.GetBytes(str);
+                encData_byte = Util.UTF8.GetBytes(str);
                 string encodedData = Convert.ToBase64String(encData_byte);
                 return encodedData;
             }
@@ -7134,7 +7147,7 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
 
             ILandObject land = World.LandChannel.GetLandObject(m_host.AbsolutePosition.X, m_host.AbsolutePosition.Y);
 
-            if (land.landData.OwnerID != m_host.ObjectOwner)
+            if (land.LandData.OwnerID != m_host.ObjectOwner)
                 return;
 
             land.SetMusicUrl(url);
@@ -7834,8 +7847,10 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
         public LSL_String llGetHTTPHeader(LSL_Key request_id, string header)
         {
             m_host.AddScriptLPS(1);
-            NotImplemented("llGetHTTPHeader");
-            return String.Empty;
+             
+           if (m_UrlModule != null)
+               return m_UrlModule.GetHttpHeader(new UUID(request_id), header);
+           return String.Empty;
         }
 
 
@@ -8175,7 +8190,7 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
 
                 string reply = String.Empty;
 
-                RegionInfo info = m_ScriptEngine.World.RequestClosestRegion(simulator);
+                GridRegion info = m_ScriptEngine.World.GridService.GetRegionByName(m_ScriptEngine.World.RegionInfo.ScopeID, simulator);
 
                 switch (data)
                 {
@@ -8202,7 +8217,7 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
                             ConditionalScriptSleep(1000);
                             return UUID.Zero.ToString();
                         }
-                        int access = info.RegionSettings.Maturity;
+                        int access = info.Maturity;
                         if (access == 0)
                             reply = "PG";
                         else if (access == 1)
@@ -8391,7 +8406,7 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
             bool update = false; // send a ParcelMediaUpdate (and possibly change the land's media URL)?
             byte loop = 0;
 
-            LandData landData = landObject.landData;
+            LandData landData = landObject.LandData;
             string url = landData.MediaURL;
             string texture = landData.MediaID.ToString();
             bool autoAlign = landData.MediaAutoScale != 0;
@@ -8820,7 +8835,7 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
         {
             m_host.AddScriptLPS(1);
             UUID key;
-            LandData land = World.LandChannel.GetLandObject(m_host.AbsolutePosition.X, m_host.AbsolutePosition.Y).landData;
+            LandData land = World.LandChannel.GetLandObject(m_host.AbsolutePosition.X, m_host.AbsolutePosition.Y).LandData;
             if (land.OwnerID == m_host.OwnerID)
             {
                 ParcelManager.ParcelAccessEntry entry = new ParcelManager.ParcelAccessEntry();
@@ -8839,7 +8854,7 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
         {
             m_host.AddScriptLPS(1);
             UUID key;
-            LandData land = World.LandChannel.GetLandObject(m_host.AbsolutePosition.X, m_host.AbsolutePosition.Y).landData;
+            LandData land = World.LandChannel.GetLandObject(m_host.AbsolutePosition.X, m_host.AbsolutePosition.Y).LandData;
             if (land.OwnerID == m_host.OwnerID)
             {
                 if (UUID.TryParse(avatar, out key))
@@ -8861,7 +8876,7 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
         {
             m_host.AddScriptLPS(1);
             UUID key;
-            LandData land = World.LandChannel.GetLandObject(m_host.AbsolutePosition.X, m_host.AbsolutePosition.Y).landData;
+            LandData land = World.LandChannel.GetLandObject(m_host.AbsolutePosition.X, m_host.AbsolutePosition.Y).LandData;
             if (land.OwnerID == m_host.OwnerID)
             {
                 if (UUID.TryParse(avatar, out key))
@@ -9006,7 +9021,7 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
         public LSL_Integer llGetParcelFlags(LSL_Vector pos)
         {
             m_host.AddScriptLPS(1);
-            return (int)World.LandChannel.GetLandObject((float)pos.x, (float)pos.y).landData.Flags;
+            return (int)World.LandChannel.GetLandObject((float)pos.x, (float)pos.y).LandData.Flags;
         }
 
         public LSL_Integer llGetRegionFlags()
@@ -9113,19 +9128,21 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
         }
 
 
-        public void llHTTPResponse(string url, int status, string body)
+        public void llHTTPResponse(LSL_Key id, int status, string body)
         {
             // Partial implementation: support for parameter flags needed
             //   see http://wiki.secondlife.com/wiki/llHTTPResponse
 
             m_host.AddScriptLPS(1);
-            NotImplemented("llHTTPResponse");
+
+            if (m_UrlModule != null)
+                m_UrlModule.HttpResponse(new UUID(id), status,body);
         }
 
         public void llResetLandBanList()
         {
             m_host.AddScriptLPS(1);
-            LandData land = World.LandChannel.GetLandObject(m_host.AbsolutePosition.X, m_host.AbsolutePosition.Y).landData;
+            LandData land = World.LandChannel.GetLandObject(m_host.AbsolutePosition.X, m_host.AbsolutePosition.Y).LandData;
             if (land.OwnerID == m_host.OwnerID)
             {
                 foreach (ParcelManager.ParcelAccessEntry entry in land.ParcelAccessList)
@@ -9142,7 +9159,7 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
         public void llResetLandPassList()
         {
             m_host.AddScriptLPS(1);
-            LandData land = World.LandChannel.GetLandObject(m_host.AbsolutePosition.X, m_host.AbsolutePosition.Y).landData;
+            LandData land = World.LandChannel.GetLandObject(m_host.AbsolutePosition.X, m_host.AbsolutePosition.Y).LandData;
             if (land.OwnerID == m_host.OwnerID)
             {
                 foreach (ParcelManager.ParcelAccessEntry entry in land.ParcelAccessList)
@@ -9226,7 +9243,7 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
             LSL_List ret = new LSL_List();
             if (land != null)
             {
-                foreach (KeyValuePair<UUID, int> detectedParams in land.getLandObjectOwners())
+                foreach (KeyValuePair<UUID, int> detectedParams in land.GetLandObjectOwners())
                 {
                     ret.Add(detectedParams.Key.ToString());
                     ret.Add(detectedParams.Value);

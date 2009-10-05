@@ -54,7 +54,7 @@ namespace OpenSim.Framework
     /// </summary>
     public class Util
     {
-        private static readonly ILog m_log = LogManager.GetLogger(MethodBase.GetCurrentMethod().DeclaringType);       
+        private static readonly ILog m_log = LogManager.GetLogger(MethodBase.GetCurrentMethod().DeclaringType);
 
         private static uint nextXferID = 5000;
         private static Random randomClass = new Random();
@@ -70,6 +70,41 @@ namespace OpenSim.Framework
         public static readonly Regex UUIDPattern 
             = new Regex("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$");
         
+        /// <summary>
+        /// Linear interpolates B<->C using percent A
+        /// </summary>
+        /// <param name="a"></param>
+        /// <param name="b"></param>
+        /// <param name="c"></param>
+        /// <returns></returns>
+        public static double lerp(double a, double b, double c)
+        {
+            return (b*a) + (c*(1 - a));
+        }
+
+        /// <summary>
+        /// Bilinear Interpolate, see Lerp but for 2D using 'percents' X & Y.
+        /// Layout:
+        ///     A B
+        ///     C D
+        /// A<->C = Y
+        /// C<->D = X
+        /// </summary>
+        /// <param name="x"></param>
+        /// <param name="y"></param>
+        /// <param name="a"></param>
+        /// <param name="b"></param>
+        /// <param name="c"></param>
+        /// <param name="d"></param>
+        /// <returns></returns>
+        public static double lerp2D(double x, double y, double a, double b, double c, double d)
+        {
+            return lerp(y, lerp(x, a, b), lerp(x, c, d));
+        }
+
+
+        public static Encoding UTF8 = Encoding.UTF8;
+
         /// <value>
         /// Well known UUID for the blank texture used in the Linden SL viewer version 1.20 (and hopefully onwards) 
         /// </value>
@@ -103,7 +138,7 @@ namespace OpenSim.Framework
             float dx = a.X - b.X;
             float dy = a.Y - b.Y;
             float dz = a.Z - b.Z;
-            return (dx*dx + dy*dy + dz*dz) < (amount*amount);           
+            return (dx*dx + dy*dy + dz*dz) < (amount*amount);
         }
 
         /// <summary>
@@ -432,7 +467,7 @@ namespace OpenSim.Framework
                     output.Append(": ");
                 }
 
-                output.Append(CleanString(Encoding.UTF8.GetString(bytes, 0, bytes.Length - 1)));
+                output.Append(CleanString(Util.UTF8.GetString(bytes, 0, bytes.Length - 1)));
             }
             else
             {
@@ -793,7 +828,7 @@ namespace OpenSim.Framework
 
         public static string Compress(string text)
         {
-            byte[] buffer = Encoding.UTF8.GetBytes(text);
+            byte[] buffer = Util.UTF8.GetBytes(text);
             MemoryStream memory = new MemoryStream();
             using (GZipStream compressor = new GZipStream(memory, CompressionMode.Compress, true))
             {
@@ -827,7 +862,7 @@ namespace OpenSim.Framework
                     decompressor.Read(buffer, 0, buffer.Length);
                 }
 
-                return Encoding.UTF8.GetString(buffer);
+                return Util.UTF8.GetString(buffer);
             }
         }
 
@@ -942,7 +977,7 @@ namespace OpenSim.Framework
             else
             {
                 os = ReadEtcIssue();
-            }         
+            }
                       
             if (os.Length > 45)
             {
@@ -1099,7 +1134,7 @@ namespace OpenSim.Framework
         {
             byte[] data = new byte[length];
             stream.Read(data, 0, length);
-            string strdata = Encoding.UTF8.GetString(data);
+            string strdata = Util.UTF8.GetString(data);
             OSDMap args = null;
             OSD buffer;
             buffer = OSDParser.DeserializeJson(strdata);
@@ -1168,6 +1203,32 @@ namespace OpenSim.Framework
             }
 
             return found.ToArray();
+        }
+
+        public static string ServerURI(string uri)
+        {
+            if (uri == string.Empty)
+                return string.Empty;
+
+            // Get rid of eventual slashes at the end
+            uri = uri.TrimEnd('/');
+
+            IPAddress ipaddr1 = null;
+            string port1 = "";
+            try
+            {
+                ipaddr1 = Util.GetHostFromURL(uri);
+            }
+            catch { }
+
+            try
+            {
+                port1 = uri.Split(new char[] { ':' })[2];
+            }
+            catch { }
+
+            // We tried our best to convert the domain names to IP addresses
+            return (ipaddr1 != null) ? "http://" + ipaddr1.ToString() + ":" + port1 : uri;
         }
 
         #region FireAndForget Threading Pattern

@@ -36,6 +36,7 @@ using OpenSim.Server.Handlers.Base;
 using OpenSim.Services.Interfaces;
 using OpenSim.Framework;
 using OpenSim.Framework.Servers.HttpServer;
+using GridRegion = OpenSim.Services.Interfaces.GridRegion;
 
 using OpenMetaverse;
 using OpenMetaverse.StructuredData;
@@ -148,15 +149,18 @@ namespace OpenSim.Server.Handlers.Neighbour
             }
 
             // Finally!
-            bool success = m_NeighbourService.HelloNeighbour(regionhandle, aRegion);
-
+            GridRegion thisRegion = m_NeighbourService.HelloNeighbour(regionhandle, aRegion);
+            
             OSDMap resp = new OSDMap(1);
 
-            resp["success"] = OSD.FromBoolean(success);
+            if (thisRegion != null)
+                resp["success"] = OSD.FromBoolean(true);
+            else
+                resp["success"] = OSD.FromBoolean(false);
 
             httpResponse.StatusCode = (int)HttpStatusCode.OK;
 
-            return Encoding.UTF8.GetBytes(OSDParser.SerializeJsonString(resp));
+            return Util.UTF8.GetBytes(OSDParser.SerializeJsonString(resp));
         }
     }
 

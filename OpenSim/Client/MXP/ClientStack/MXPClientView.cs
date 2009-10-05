@@ -304,7 +304,7 @@ namespace OpenSim.Client.MXP.ClientStack
             String typeName = ToOmType(primShape.PCode);
             m_log.Info("[MXP ClientStack] Transmitting Primitive" + typeName);
 
-            PerceptionEventMessage pe = new PerceptionEventMessage();           
+            PerceptionEventMessage pe = new PerceptionEventMessage();
             pe.ObjectFragment.ObjectId = objectID.Guid;
 
             pe.ObjectFragment.ParentObjectId = Guid.Empty;
@@ -826,12 +826,7 @@ namespace OpenSim.Client.MXP.ClientStack
             OpenSim.Region.Framework.Scenes.Scene scene=(OpenSim.Region.Framework.Scenes.Scene)Scene;
             AvatarAppearance appearance;
             scene.GetAvatarAppearance(this,out appearance);
-            List<byte> visualParams = new List<byte>();
-            foreach (byte visualParam in appearance.VisualParams)
-            {
-                visualParams.Add(visualParam);
-            }
-            OnSetAppearance(appearance.Texture.GetBytes(), visualParams);
+            OnSetAppearance(appearance.Texture, (byte[])appearance.VisualParams.Clone());
         }
 
         public void Stop()
@@ -891,7 +886,7 @@ namespace OpenSim.Client.MXP.ClientStack
             chatActionEvent.ActionFragment.SourceObjectId = fromAgentID.Guid;
             chatActionEvent.ActionFragment.ObservationRadius = 180.0f;
             chatActionEvent.ActionFragment.ExtensionDialect = "TEXT";
-            chatActionEvent.SetPayloadData(Encoding.UTF8.GetBytes(message));
+            chatActionEvent.SetPayloadData(Util.UTF8.GetBytes(message));
 
             Session.Send(chatActionEvent);
         }
@@ -1647,6 +1642,10 @@ namespace OpenSim.Client.MXP.ClientStack
         }
         
         public void SendPickInfoReply(UUID pickID,UUID creatorID, bool topPick, UUID parcelID, string name, string desc, UUID snapshotID, string user, string originalName, string simName, Vector3 posGlobal, int sortOrder, bool enabled)
+        {
+        }
+        
+        public void SendRebakeAvatarTextures(UUID textureID)
         {
         }
     }

@@ -81,7 +81,7 @@ namespace OpenSim.Region.OptionalModules.Agent.InternetRelayClientView.Server
         {
             m_log.Info("[IRCd] Sending >>> " + command);
 
-            byte[] buf = Encoding.UTF8.GetBytes(command + "\r\n");
+            byte[] buf = Util.UTF8.GetBytes(command + "\r\n");
 
             m_client.GetStream().BeginWrite(buf, 0, buf.Length, SendComplete, null);
         }
@@ -109,7 +109,7 @@ namespace OpenSim.Region.OptionalModules.Agent.InternetRelayClientView.Server
                     byte[] buf = new byte[8]; // RFC1459 defines max message size as 512.
 
                     int count = m_client.GetStream().Read(buf, 0, buf.Length);
-                    string line = Encoding.UTF8.GetString(buf, 0, count);
+                    string line = Util.UTF8.GetString(buf, 0, count);
 
                     strbuf += line;
 
@@ -601,7 +601,7 @@ namespace OpenSim.Region.OptionalModules.Agent.InternetRelayClientView.Server
                 if (names.Length > 1)
                     return names[1];
                 return names[0];
-            }            
+            }
         }
 
         public IScene Scene
@@ -861,12 +861,7 @@ namespace OpenSim.Region.OptionalModules.Agent.InternetRelayClientView.Server
             Scene scene = (Scene)Scene;
             AvatarAppearance appearance;
             scene.GetAvatarAppearance(this, out appearance);
-            List<byte> visualParams = new List<byte>();
-            foreach (byte visualParam in appearance.VisualParams)
-            {
-                visualParams.Add(visualParam);
-            }
-            OnSetAppearance(appearance.Texture.GetBytes(), visualParams);
+            OnSetAppearance(appearance.Texture, (byte[])appearance.VisualParams.Clone());
         }
 
         public void SendRegionHandshake(RegionInfo regionInfo, RegionHandshakeArgs args)
@@ -1609,5 +1604,9 @@ namespace OpenSim.Region.OptionalModules.Agent.InternetRelayClientView.Server
         }
 
         #endregion
+
+        public void SendRebakeAvatarTextures(UUID textureID)
+        {
+        }
     }
 }

@@ -82,7 +82,6 @@ namespace OpenSim.Region.Physics.OdePlugin
 
         // private float m_tensor = 5f;
         private int body_autodisable_frames = 20;
-        private IMesh primMesh = null;
 
 
         private const CollisionCategories m_default_collisionFlags = (CollisionCategories.Geom
@@ -814,22 +813,17 @@ namespace OpenSim.Region.Physics.OdePlugin
                 }
             }
 
-            IMesh oldMesh = primMesh;
+            IntPtr vertices, indices;
+            int vertexCount, indexCount;
+            int vertexStride, triStride;
+            mesh.getVertexListAsPtrToFloatArray( out vertices, out vertexStride, out vertexCount ); // Note, that vertices are fixed in unmanaged heap
+            mesh.getIndexListAsPtrToIntArray( out indices, out triStride, out indexCount ); // Also fixed, needs release after usage
 
-            primMesh = mesh;
-
-            float[] vertexList = primMesh.getVertexListAsFloatLocked(); // Note, that vertextList is pinned in memory
-            int[] indexList = primMesh.getIndexListAsIntLocked(); // Also pinned, needs release after usage
-
-            primMesh.releaseSourceMeshData(); // free up the original mesh data to save memory
-
-            int VertexCount = vertexList.GetLength(0)/3;
-            int IndexCount = indexList.GetLength(0);
+            mesh.releaseSourceMeshData(); // free up the original mesh data to save memory
 
             _triMeshData = d.GeomTriMeshDataCreate();
 
-            d.GeomTriMeshDataBuildSimple(_triMeshData, vertexList, 3*sizeof (float), VertexCount, indexList, IndexCount,
-                                         3*sizeof (int));
+            d.GeomTriMeshDataBuildSimple(_triMeshData, vertices, vertexStride, vertexCount, indices, indexCount, triStride);
             d.GeomTriMeshDataPreprocess(_triMeshData);
 
             _parent_scene.waitForSpaceUnlock(m_targetSpace);
@@ -845,12 +839,6 @@ namespace OpenSim.Region.Physics.OdePlugin
             {
                 m_log.Error("[PHYSICS]: MESH LOCKED");
                 return;
-            }
-
-            if (oldMesh != null)
-            {
-                oldMesh.releasePinned();
-                oldMesh = null;
             }
 
            // if (IsPhysical && Body == (IntPtr) 0)

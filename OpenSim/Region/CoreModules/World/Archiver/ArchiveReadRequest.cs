@@ -53,6 +53,7 @@ namespace OpenSim.Region.CoreModules.World.Archiver
         private static readonly ILog m_log = LogManager.GetLogger(MethodBase.GetCurrentMethod().DeclaringType);
 
         private static ASCIIEncoding m_asciiEncoding = new ASCIIEncoding();
+        private static UTF8Encoding m_utf8Encoding = new UTF8Encoding();
 
         private Scene m_scene;
         private Stream m_loadStream;
@@ -100,6 +101,7 @@ namespace OpenSim.Region.CoreModules.World.Archiver
             int successfulAssetRestores = 0;
             int failedAssetRestores = 0;
             List<string> serialisedSceneObjects = new List<string>();
+            List<string> serialisedParcels = new List<string>();
             string filePath = "NONE";
             
             try
@@ -110,16 +112,16 @@ namespace OpenSim.Region.CoreModules.World.Archiver
                 TarArchiveReader.TarEntryType entryType;
 
                 while ((data = archive.ReadEntry(out filePath, out entryType)) != null)
-                {                    
+                {
                     //m_log.DebugFormat(
                     //    "[ARCHIVER]: Successfully read {0} ({1} bytes)", filePath, data.Length);
                     
                     if (TarArchiveReader.TarEntryType.TYPE_DIRECTORY == entryType)
-                        continue;                    
+                        continue;
 
                     if (filePath.StartsWith(ArchiveConstants.OBJECTS_PATH))
                     {
-                        serialisedSceneObjects.Add(m_asciiEncoding.GetString(data));
+                        serialisedSceneObjects.Add(m_utf8Encoding.GetString(data));
                     }
                     else if (filePath.StartsWith(ArchiveConstants.ASSETS_PATH))
                     {
@@ -135,6 +137,10 @@ namespace OpenSim.Region.CoreModules.World.Archiver
                     else if (!m_merge && filePath.StartsWith(ArchiveConstants.SETTINGS_PATH))
                     {
                         LoadRegionSettings(filePath, data);
+                    } 
+                    else if (!m_merge && filePath.StartsWith(ArchiveConstants.LANDDATA_PATH))
+                    {
+                        serialisedParcels.Add(m_utf8Encoding.GetString(data));
                     } 
                     else if (filePath == ArchiveConstants.CONTROL_FILE_PATH)
                     {
@@ -169,11 +175,31 @@ namespace OpenSim.Region.CoreModules.World.Archiver
                 m_scene.DeleteAllSceneObjects();
             }
 
+            // Try to retain the original creator/owner/lastowner if their uuid is present on this grid
+            // otherwise, use the master avatar uuid instead
+            UUID masterAvatarId = m_scene.RegionInfo.MasterAvatarAssignedUUID;
+
+            if (m_scene.RegionInfo.EstateSettings.EstateOwner != UUID.Zero)
+                masterAvatarId = m_scene.RegionInfo.EstateSettings.EstateOwner;
+
+            // Reload serialized parcels
+            m_log.InfoFormat("[ARCHIVER]: Loading {0} parcels.  Please wait.", serialisedParcels.Count);
+            List<LandData> landData = new List<LandData>();
+            foreach (string serialisedParcel in serialisedParcels)
+            {
+                LandData parcel = LandDataSerializer.Deserialize(serialisedParcel);
+                if (!ResolveUserUuid(parcel.OwnerID))
+                    parcel.OwnerID = masterAvatarId;
+                landData.Add(parcel);
+            }
+            m_scene.EventManager.TriggerIncomingLandDataFromStorage(landData);
+            m_log.InfoFormat("[ARCHIVER]: Restored {0} parcels.", landData.Count);
+
             // Reload serialized prims
             m_log.InfoFormat("[ARCHIVER]: Loading {0} scene objects.  Please wait.", serialisedSceneObjects.Count);
 
             IRegionSerialiserModule serialiser = m_scene.RequestModuleInterface<IRegionSerialiserModule>();
-            int sceneObjectsLoadedCount = 0;            
+            int sceneObjectsLoadedCount = 0;
 
             foreach (string serialisedSceneObject in serialisedSceneObjects)
             {
@@ -198,12 +224,6 @@ namespace OpenSim.Region.CoreModules.World.Archiver
                 // to the same scene (when this is possible).
                 sceneObject.ResetIDs();
 
-                // Try to retain the original creator/owner/lastowner if their uuid is present on this grid
-                // otherwise, use the master avatar uuid instead
-                UUID masterAvatarId = m_scene.RegionInfo.MasterAvatarAssignedUUID;
-
-                if (m_scene.RegionInfo.EstateSettings.EstateOwner != UUID.Zero)
-                    masterAvatarId = m_scene.RegionInfo.EstateSettings.EstateOwner;
 
                 foreach (SceneObjectPart part in sceneObject.Children.Values)
                 {
@@ -499,7 +519,7 @@ namespace OpenSim.Region.CoreModules.World.Archiver
             XmlParserContext context = new XmlParserContext(null, nsmgr, null, XmlSpace.None);
 
             XmlTextReader xtr 
-                = new XmlTextReader(m_asciiEncoding.GetString(data), XmlNodeType.Document, context);            
+                = new XmlTextReader(m_asciiEncoding.GetString(data), XmlNodeType.Document, context);
 
             RegionSettings currentRegionSettings = m_scene.RegionInfo.RegionSettings;
 

@@ -2536,7 +2536,7 @@ namespace OpenSim.Region.Physics.OdePlugin
 
             if (iPropertiesNotSupportedDefault == 0)
             {
-#if SPAM              
+#if SPAM
                 m_log.Warn("NonMesh");
 #endif
                 return false;
@@ -3334,7 +3334,7 @@ namespace OpenSim.Region.Physics.OdePlugin
         {
             // this._heightmap[i] = (double)heightMap[i];
             // dbm (danx0r) -- creating a buffer zone of one extra sample all around
-            //_origheightmap = heightMap;    
+            //_origheightmap = heightMap;
            
             float[] _heightmap;
 
@@ -3476,7 +3476,7 @@ namespace OpenSim.Region.Physics.OdePlugin
         public override void UnCombine(PhysicsScene pScene)
         {
             IntPtr localGround = IntPtr.Zero;
-            float[] localHeightfield;
+            //float[] localHeightfield;
             bool proceed = false;
             List<IntPtr> geomDestroyList = new List<IntPtr>();
 
@@ -3520,16 +3520,16 @@ namespace OpenSim.Region.Physics.OdePlugin
 
                                 d.GeomDestroy(g);
                                 //removingHeightField = new float[0];
-                            }                            
+                            }
                         }
                     }
                     else
                     {
                         m_log.Warn("[PHYSICS]: Couldn't proceed with UnCombine.  Region has inconsistant data.");
                     }
-                }                
+                }
             }
-        }       
+        }
 
         public override void SetWaterLevel(float baseheight)
         {
@@ -3771,16 +3771,13 @@ namespace OpenSim.Region.Physics.OdePlugin
                         sides.Z = 0.5f;
 
                         ds.DrawBox(ref pos, ref R, ref sides);
-
-
                     }
                 }
             }
         }
 
         public void start(int unused)
-        {
-            
+        {            
             ds.SetViewpoint(ref xyz, ref hpr);
         }
 #endif

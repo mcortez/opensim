@@ -134,19 +134,24 @@
     ; if you would like to allow prims to be physical and move by physics with the physical checkbox in the client set this to true.
     physical_prim = true
 
-    ; Select a mesher here. ZeroMesher is safe and fast.
-    ; ZeroMesher also means that the physics engine models the physics of prims
-    ; sticking to the basic shapes the engine does support. Usually this is only a box.
-    ; Meshmerizer gives a better handling of complex prims by using triangle meshes.
-    ; Note that only ODE physics currently deals with meshed prims in a satisfactory way
+    ; Select a mesher here.
     ;
-    meshing = ZeroMesher
-    ;meshing = Meshmerizer
+    ; Meshmerizer properly handles complex prims by using triangle meshes.
+    ; Note that only the ODE physics engine currently deals with meshed prims in a satisfactory way
+    ;
+    ; ZeroMesher is faster but leaves the physics engine to model the mesh using the basic shapes that it supports
+    ; Usually this is only a box
+
+    meshing = Meshmerizer
+    ;meshing = ZeroMesher
 
     ; Choose one of the physics engines below
-    physics = basicphysics
+    ; OpenDynamicsEngine is by some distance the most developed physics engine
+    ; basicphysics effectively does not model physics at all, making all objects phantom
+
+    physics = OpenDynamicsEngine
+    ;physics = basicphysics
     ;physics = POS
-    ;physics = OpenDynamicsEngine
     ;physics = modified_BulletX
 
     ; ##
@@ -300,6 +305,10 @@
     http_listener_sslport = 9001 ; Use this port for SSL connections
     http_listener_ssl_cert = "" ; Currently unused, but will be used for OSHttpServer
 
+    ; Hostname to use in llRequestURL/llRequestSecureURL
+    ; if not defined - default machine name is being used 
+    ; (on Windows this mean NETBIOS name - useably only inside local network)
+    ; ExternalHostNameForLSL=127.0.0.1
     ; Uncomment below to enable llRemoteData/remote channels
     ; remoteDataPort = 20800
 
@@ -317,7 +326,7 @@
 
     ; The MessagingServer is a companion of the UserServer. It uses
     ; user_send_key and user_recv_key, too
-    messaging_server_url = "http://127.0.0.1:8006"
+    ;messaging_server_url = "http://127.0.0.1:8006"
 
     ; What is reported as the "X-Secondlife-Shard"
     ; Defaults to the user server url if not set
@@ -1302,7 +1311,7 @@
     ;NoticesEnabled   = true
 
     ; This makes the Groups modules very chatty on the console.
-    ;DebugEnabled     = true
+    DebugEnabled     = false
 
     ; Specify which messaging module to use for groups messaging and if it's enabled
     ;MessagingModule = GroupsMessagingModule
@@ -1347,11 +1356,6 @@
 
     ;PacketMTU = 1400
 
-    ; TextureUpdateRate (mS) determines how many times per second
-    ; texture send processing will occur. The default is 100mS.
-    ;
-    ;TextureRequestRate = 100
-
     ; TextureSendLimit determines how many different textures
     ; will be considered on each cycle. Textures are selected
     ; by priority. The old mechanism specified a value of 10 for
@@ -1364,21 +1368,13 @@
     ;
     ;TextureDataLimit = 5
 
-;; The JPEG2000 decode cache
-;; Timeout is in minutes
-
-[J2KDecoder]
-;CacheDir = "./j2kDecodeCache"
-; Time in minutes before cached decodes expire. Set to 0 for no expiration. Default is 720 minutes.
-
-;CacheTimeout = 720
-
 ;;
 ;; These are defaults that are overwritten below in [Architecture].
 ;; These defaults allow OpenSim to work out of the box with
 ;; zero configuration
 ;;
 [DatabaseService]
+    ;; default standalone, overridable in StandaloneCommon.ini
     StorageProvider = "OpenSim.Data.SQLite.dll"
 
 
@@ -1386,6 +1382,9 @@
     DefaultAssetLoader = "OpenSim.Framework.AssetLoader.Filesystem.dll"
     AssetLoaderArgs = "assets/AssetSets.xml"
 
+[GridService]
+    ;; default standalone, overridable in StandaloneCommon.ini
+	StorageProvider = "OpenSim.Data.Null.dll:NullRegionData"
 
     ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
     ;; The following is the configuration section for the new style services

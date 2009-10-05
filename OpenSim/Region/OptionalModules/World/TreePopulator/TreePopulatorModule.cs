@@ -92,7 +92,7 @@ namespace OpenSim.Region.OptionalModules.World.TreePopulator
                 this.m_maximum_scale = cp.m_maximum_scale;
                 this.m_initial_scale = cp.m_initial_scale;
                 this.m_rate = cp.m_rate;
-                this.m_planted = planted;  
+                this.m_planted = planted;
                 this.m_trees = new List<UUID>();
             }
 
@@ -539,7 +539,7 @@ namespace OpenSim.Region.OptionalModules.World.TreePopulator
             {
                 XmlSerializer xs = new XmlSerializer(typeof(Copse));
 
-                using (XmlTextWriter writer = new XmlTextWriter(fileName, System.Text.Encoding.UTF8))
+                using (XmlTextWriter writer = new XmlTextWriter(fileName, Util.UTF8))
                 {
                     writer.Formatting = Formatting.Indented;
                     xs.Serialize(writer, obj);

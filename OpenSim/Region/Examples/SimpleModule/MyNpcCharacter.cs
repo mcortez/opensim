@@ -789,7 +789,7 @@ namespace OpenSim.Region.Examples.SimpleModule
         
         public void SendViewerEffect(ViewerEffectPacket.EffectBlock[] effectBlocks)
         {
-        }        
+        }
 
         public void SendViewerTime(int phase)
         {
@@ -1102,5 +1102,9 @@ namespace OpenSim.Region.Examples.SimpleModule
         {
         }
         #endregion
+        
+        public void SendRebakeAvatarTextures(UUID textureID)
+        {
+        }
     }
 }
