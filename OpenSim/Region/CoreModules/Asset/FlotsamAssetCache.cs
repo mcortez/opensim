@@ -61,7 +61,8 @@ namespace Flotsam.RegionModules.AssetCache
                 LogManager.GetLogger(
                 MethodBase.GetCurrentMethod().DeclaringType);
 
-        private bool m_Enabled = false;
+        private bool m_EnabledAsCache = false;
+        private bool m_EnabledAsService = false;
 
         private const string m_ModuleName = "FlotsamAssetCache";
         private const string m_DefaultCacheDirectory = m_ModuleName;
@@ -131,11 +132,18 @@ namespace Flotsam.RegionModules.AssetCache
 
             if (moduleConfig != null)
             {
+                if (moduleConfig.GetString("AssetServices", "") == this.Name)
+                {
+                    m_EnabledAsService = true;
+                }
+                    
+
+
                 string name = moduleConfig.GetString("AssetCaching", "");
 
                 if (name == Name)
                 {
-                    m_Enabled = true;
+                    m_EnabledAsCache = true;
                     m_log.InfoFormat("[FLOTSAM ASSET CACHE]: {0} enabled", this.Name);
 
                     IConfig assetConfig = source.Configs["AssetCache"];
@@ -223,7 +231,12 @@ namespace Flotsam.RegionModules.AssetCache
 
         public void AddRegion(Scene scene)
         {
-            if (m_Enabled)
+            if (m_EnabledAsService)
+            {
+                scene.RegisterModuleInterface<IAssetService>(this);
+            }
+
+            if (m_EnabledAsCache)
             {
                 scene.RegisterModuleInterface<IImprovedAssetCache>(this);
                 m_Scenes.Add(scene);
@@ -234,15 +247,22 @@ namespace Flotsam.RegionModules.AssetCache
 
                 }
             }
+
         }
 
         public void RemoveRegion(Scene scene)
         {
-            if (m_Enabled)
+            if (m_EnabledAsCache)
             {
                 scene.UnregisterModuleInterface<IImprovedAssetCache>(this);
                 m_Scenes.Remove(scene);
             }
+
+            if (m_EnabledAsService)
+            {
+                scene.UnregisterModuleInterface<IAssetService>(this);
+            }
+
         }
 
         public void RegionLoaded(Scene scene)
