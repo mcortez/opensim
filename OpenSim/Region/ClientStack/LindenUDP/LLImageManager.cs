@@ -59,6 +59,8 @@ namespace OpenSim.Region.ClientStack.LindenUDP
         private C5.IntervalHeap<J2KImage> m_priorityQueue = new C5.IntervalHeap<J2KImage>(10, new J2KImageComparer());
         private object m_syncRoot = new object();
 
+        private IHyperAssetService m_hyperAssets;
+
         public LLClientView Client { get { return m_client; } }
         public AssetBase MissingImage { get { return m_missingImage; } }
 
@@ -74,6 +76,7 @@ namespace OpenSim.Region.ClientStack.LindenUDP
                 m_log.Error("[ClientView] - Couldn't set missing image asset, falling back to missing image packet. This is known to crash the client");
 
             m_j2kDecodeModule = pJ2kDecodeModule;
+            m_hyperAssets = client.Scene.RequestModuleInterface<IHyperAssetService>();
         }
 
         /// <summary>
@@ -88,7 +91,7 @@ namespace OpenSim.Region.ClientStack.LindenUDP
                 J2KImage imgrequest;
 
                 // Do a linear search for this texture download
-                lock (m_priorityQueue)
+                lock (m_syncRoot)
                     m_priorityQueue.Find(delegate(J2KImage img) { return img.TextureID == newRequest.RequestedAssetID; }, out imgrequest);
 
                 if (imgrequest != null)
@@ -99,7 +102,7 @@ namespace OpenSim.Region.ClientStack.LindenUDP
 
                         try 
                         {
-                            lock (m_priorityQueue)
+                            lock (m_syncRoot)
                                 m_priorityQueue.Delete(imgrequest.PriorityQueueHandle); 
                         }
                         catch (Exception) { }
@@ -146,6 +149,8 @@ namespace OpenSim.Region.ClientStack.LindenUDP
                         imgrequest = new J2KImage(this);
                         imgrequest.J2KDecoder = m_j2kDecodeModule;
                         imgrequest.AssetService = m_assetCache;
+                        imgrequest.AgentID = m_client.AgentId;
+                        imgrequest.HyperAssets = m_hyperAssets;
                         imgrequest.DiscardLevel = newRequest.DiscardLevel;
                         imgrequest.StartPacket = Math.Max(1, newRequest.PacketNumber);
                         imgrequest.Priority = newRequest.Priority;
@@ -172,7 +177,7 @@ namespace OpenSim.Region.ClientStack.LindenUDP
                 m_lastloopprocessed = DateTime.Now.Ticks;
 
                 // This can happen during Close()
-                if (m_client == null || m_client.PacketHandler == null || m_client.PacketHandler.PacketQueue == null)
+                if (m_client == null)
                     return false;
                 
                 while ((imagereq = GetHighestPriorityImage()) != null)
@@ -211,7 +216,7 @@ namespace OpenSim.Region.ClientStack.LindenUDP
         {
             J2KImage image = null;
 
-            lock (m_priorityQueue)
+            lock (m_syncRoot)
             {
 
                 if (m_priorityQueue.Count > 0)
@@ -230,23 +235,27 @@ namespace OpenSim.Region.ClientStack.LindenUDP
         {
             image.PriorityQueueHandle = null;
 
-            lock (m_priorityQueue)
-                m_priorityQueue.Add(ref image.PriorityQueueHandle, image);
+            lock (m_syncRoot)
+                try
+                {
+                    m_priorityQueue.Add(ref image.PriorityQueueHandle, image);
+                }
+                catch (Exception) { }
         }
 
         void RemoveImageFromQueue(J2KImage image)
         {
-            try
-            {
-                lock (m_priorityQueue)
+            lock (m_syncRoot)
+                try
+                {
                     m_priorityQueue.Delete(image.PriorityQueueHandle);
-            }
-            catch (Exception) { }
+                }
+                catch (Exception) { }
         }
 
         void UpdateImageInQueue(J2KImage image)
         {
-            lock (m_priorityQueue)
+            lock (m_syncRoot)
             {
                 try { m_priorityQueue.Replace(image.PriorityQueueHandle, image); }
                 catch (Exception)

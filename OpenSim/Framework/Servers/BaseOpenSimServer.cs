@@ -27,6 +27,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Reflection;
 using System.Text;
@@ -109,9 +110,8 @@ namespace OpenSim.Framework.Servers
             m_periodicDiagnosticsTimer.Elapsed += new ElapsedEventHandler(LogDiagnostics);
             m_periodicDiagnosticsTimer.Enabled = true;
 
-            // Add ourselves to thread monitoring.  This thread will go on to become the console listening thread
+            // This thread will go on to become the console listening thread
             Thread.CurrentThread.Name = "ConsoleThread";
-            ThreadTracker.Add(Thread.CurrentThread);
 
             ILoggerRepository repository = LogManager.GetRepository();
             IAppender[] appenders = repository.GetAppenders();
@@ -235,35 +235,31 @@ namespace OpenSim.Framework.Servers
         {
             StringBuilder sb = new StringBuilder();
 
-            List<Thread> threads = ThreadTracker.GetThreads();
+            ProcessThreadCollection threads = ThreadTracker.GetThreads();
             if (threads == null)
             {
-                sb.Append("Thread tracking is only enabled in DEBUG mode.");
+                sb.Append("OpenSim thread tracking is only enabled in DEBUG mode.");
             }
             else
             {
                 sb.Append(threads.Count + " threads are being tracked:" + Environment.NewLine);
-                foreach (Thread t in threads)
+                foreach (ProcessThread t in threads)
                 {
-                    if (t.IsAlive)
-                    {
-                        sb.Append(
-                            "ID: " + t.ManagedThreadId + ", Name: " + t.Name + ", Alive: " + t.IsAlive
-                            + ", Pri: " + t.Priority + ", State: " + t.ThreadState + Environment.NewLine);
-                    }
+                    sb.Append("ID: " + t.Id + ", TotalProcessorTime: " + t.TotalProcessorTime + ", TimeRunning: " +
+                        (DateTime.Now - t.StartTime) + ", Pri: " + t.CurrentPriority + ", State: " + t.ThreadState );
+                    if (t.ThreadState == System.Diagnostics.ThreadState.Wait)
+                        sb.Append(", Reason: " + t.WaitReason + Environment.NewLine);
                     else
-                    {
-                        try
-                        {
-                            sb.Append("ID: " + t.ManagedThreadId + ", Name: " + t.Name + ", DEAD" + Environment.NewLine);
-                        }
-                        catch
-                        {
-                            sb.Append("THREAD ERROR" + Environment.NewLine);
-                        }
-                    }
+                        sb.Append(Environment.NewLine);
+
                 }
             }
+            int workers = 0, ports = 0, maxWorkers = 0, maxPorts = 0;
+            ThreadPool.GetAvailableThreads(out workers, out ports);
+            ThreadPool.GetMaxThreads(out maxWorkers, out maxPorts);
+
+            sb.Append(Environment.NewLine + "*** ThreadPool threads ***"  + Environment.NewLine);
+            sb.Append("workers: " + (maxWorkers - workers) + " (" + maxWorkers + "); ports: " + (maxPorts - ports) + " (" + maxPorts + ")" + Environment.NewLine);
 
             return sb.ToString();
         }

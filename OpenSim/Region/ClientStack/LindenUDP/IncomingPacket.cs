@@ -1,4 +1,4 @@
-/*
+﻿/*
  * Copyright (c) Contributors, http://opensimulator.org/
  * See CONTRIBUTORS.TXT for a full list of copyright holders.
  *
@@ -25,14 +25,33 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-using System.Net.Sockets;
+using System;
+using OpenSim.Framework;
+using OpenMetaverse;
+using OpenMetaverse.Packets;
 
 namespace OpenSim.Region.ClientStack.LindenUDP
 {
-    public interface ILLClientStackNetworkHandler
+    /// <summary>
+    /// Holds a reference to a <seealso cref="LLUDPClient"/> and a <seealso cref="Packet"/>
+    /// for incoming packets
+    /// </summary>
+    public sealed class IncomingPacket
     {
-        void SendPacketTo(byte[] buffer, int size, SocketFlags flags, uint circuitcode); // EndPoint packetSender);
-        void RemoveClientCircuit(uint circuitcode);
-        void RegisterPacketServer(LLPacketServer server);
+        /// <summary>Client this packet came from</summary>
+        public LLUDPClient Client;
+        /// <summary>Packet data that has been received</summary>
+        public Packet Packet;
+
+        /// <summary>
+        /// Default constructor
+        /// </summary>
+        /// <param name="client">Reference to the client this packet came from</param>
+        /// <param name="packet">Packet data</param>
+        public IncomingPacket(LLUDPClient client, Packet packet)
+        {
+            Client = client;
+            Packet = packet;
+        }
     }
 }

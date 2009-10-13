@@ -31,6 +31,7 @@ using OpenMetaverse;
 using OpenMetaverse.Imaging;
 using OpenSim.Framework;
 using OpenSim.Region.Framework.Interfaces;
+using OpenSim.Region.Framework.Scenes.Hypergrid;
 using OpenSim.Services.Interfaces;
 using log4net;
 using System.Reflection;
@@ -54,6 +55,8 @@ namespace OpenSim.Region.ClientStack.LindenUDP
         public UUID TextureID;
         public IJ2KDecoder J2KDecoder;
         public IAssetService AssetService;
+        public UUID AgentID;
+        public IHyperAssetService HyperAssets;
         public OpenJPEG.J2KLayerInfo[] Layers;
         public bool IsDecoded;
         public bool HasAsset;
@@ -74,29 +77,32 @@ namespace OpenSim.Region.ClientStack.LindenUDP
 
         public bool SendPackets(LLClientView client, int maxpack)
         {
+            if (client == null)
+                return false;
+
             if (m_currentPacket <= m_stopPacket)
             {
-                bool SendMore = true;
+                int count = 0;
+                bool sendMore = true;
+
                 if (!m_sentInfo || (m_currentPacket == 0))
                 {
-                    if (SendFirstPacket(client))
-                    {
-                        SendMore = false;
-                    }
+                    sendMore = !SendFirstPacket(client);
+
                     m_sentInfo = true;
-                    m_currentPacket++;
+                    ++m_currentPacket;
+                    ++count;
                 }
                 if (m_currentPacket < 2)
                 {
                     m_currentPacket = 2;
                 }
-
-                int count = 0;
-                while (SendMore && count < maxpack && m_currentPacket <= m_stopPacket)
+                
+                while (sendMore && count < maxpack && m_currentPacket <= m_stopPacket)
                 {
-                    count++;
-                    SendMore = SendPacket(client);
-                    m_currentPacket++;
+                    sendMore = SendPacket(client);
+                    ++m_currentPacket;
+                    ++count;
                 }
 
                 if (m_currentPacket > m_stopPacket)
@@ -196,19 +202,15 @@ namespace OpenSim.Region.ClientStack.LindenUDP
 
                         m_currentPacket = StartPacket;
                     }
-
-                    if ((m_imageManager != null) && (m_imageManager.Client != null) && (m_imageManager.Client.PacketHandler != null))
-                        if (m_imageManager.Client.PacketHandler.GetQueueCount(ThrottleOutPacketType.Texture) == 0)
-                        {
-                            //m_log.Debug("No textures queued, sending one packet to kickstart it");
-                            SendPacket(m_imageManager.Client);
-                        }
                 }
             }
         }
 
         private bool SendFirstPacket(LLClientView client)
         {
+            if (client == null)
+                return false;
+
             if (m_asset == null)
             {
                 m_log.Warn("[J2KIMAGE]: Sending ImageNotInDatabase for texture " + TextureID);
@@ -241,6 +243,9 @@ namespace OpenSim.Region.ClientStack.LindenUDP
 
         private bool SendPacket(LLClientView client)
         {
+            if (client == null)
+                return false;
+
             bool complete = false;
             int imagePacketSize = ((int)m_currentPacket == (TexturePacketCount())) ? LastPacketSize() : IMAGE_PACKET_SIZE;
 
@@ -368,6 +373,17 @@ namespace OpenSim.Region.ClientStack.LindenUDP
             UUID assetID = UUID.Zero;
             if (asset != null)
                 assetID = asset.FullID;
+            else if ((HyperAssets != null) && (sender != HyperAssets))
+            {
+                // Try the user's inventory, but only if it's different from the regions'
+                string userAssets = HyperAssets.GetUserAssetServer(AgentID);
+                if ((userAssets != string.Empty) && (userAssets != HyperAssets.GetSimAssetServer()))
+                {
+                    m_log.DebugFormat("[J2KIMAGE]: texture {0} not found in local asset storage. Trying user's storage.", id);
+                    AssetService.Get(userAssets + "/" + id, HyperAssets, AssetReceived);
+                    return;
+                }
+            }
 
             AssetDataCallback(assetID, asset);
 
