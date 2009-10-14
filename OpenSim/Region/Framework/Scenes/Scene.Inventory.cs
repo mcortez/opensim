@@ -408,7 +408,7 @@ namespace OpenSim.Region.Framework.Scenes
         public virtual InventoryItemBase GiveInventoryItem(
             UUID recipient, UUID senderId, UUID itemId, UUID recipientFolderId)
         {
-            Console.WriteLine("Scene.Inventory.cs: GiveInventoryItem");
+            //Console.WriteLine("Scene.Inventory.cs: GiveInventoryItem");
 
             InventoryItemBase item = new InventoryItemBase(itemId, senderId);
             item = InventoryService.GetItem(item);
@@ -472,7 +472,8 @@ namespace OpenSim.Region.Framework.Scenes
                 itemCopy.SalePrice = item.SalePrice;
                 itemCopy.SaleType = item.SaleType;
 
-                InventoryService.AddItem(itemCopy);
+                if (InventoryService.AddItem(itemCopy))
+                    TransferInventoryAssets(itemCopy, senderId, recipient);
 
                 if (!Permissions.BypassPermissions())
                 {
@@ -492,6 +493,10 @@ namespace OpenSim.Region.Framework.Scenes
                 return null;
             }
 
+        }
+
+        protected virtual void TransferInventoryAssets(InventoryItemBase item, UUID sender, UUID receiver)
+        {
         }
 
         /// <summary>
@@ -1168,6 +1173,7 @@ namespace OpenSim.Region.Framework.Scenes
 
         private void SendInventoryUpdate(IClientAPI client, InventoryFolderBase folder, bool fetchFolders, bool fetchItems)
         {
+            m_log.DebugFormat("[AGENT INVENTORY]: Send Inventory Folder {0} Update to {1} {2}", folder.Name, client.FirstName, client.LastName);
             InventoryCollection contents = InventoryService.GetFolderContent(client.AgentId, folder.ID);
             client.SendInventoryFolderDetails(client.AgentId, folder.ID, contents.Items, contents.Folders, fetchFolders, fetchItems);
         }

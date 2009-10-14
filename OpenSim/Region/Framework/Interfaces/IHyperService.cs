@@ -1,4 +1,4 @@
-/*
+﻿/*
  * Copyright (c) Contributors, http://opensimulator.org/
  * See CONTRIBUTORS.TXT for a full list of copyright holders.
  *
@@ -24,28 +24,14 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-
+using System;
 using OpenMetaverse;
 
-namespace OpenSim.Region.ClientStack.LindenUDP
+namespace OpenSim.Region.Framework.Interfaces
 {
-    public class LLUtil
+    public interface IHyperAssetService
     {
-        /// <summary>
-        /// Convert a string to bytes suitable for use in an LL UDP packet.
-        /// </summary>
-        /// <param name="s">Truncated to 254 characters if necessary</param>
-        /// <returns></returns>
-        public static byte[] StringToPacketBytes(string s)
-        {
-            // Anything more than 254 will cause libsecondlife to barf
-            // (libsl 1550) adds an \0 on the Utils.StringToBytes conversion if it isn't present
-            if (s.Length > 254)
-            {
-                s = s.Remove(254);
-            } 
-            
-            return Utils.StringToBytes(s);
-        }
+        string GetUserAssetServer(UUID userID);
+        string GetSimAssetServer();
     }
 }

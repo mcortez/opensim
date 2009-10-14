@@ -837,7 +837,59 @@ namespace Flotsam.RegionModules.AssetCache
                 m_log.InfoFormat("[FLOTSAM ASSET CACHE] flotsamcache cachescenes - Attempt a deep cache of all assets in all scenes");
                 m_log.InfoFormat("[FLOTSAM ASSET CACHE] flotsamcache <datetime> - Purge assets older then the specified date & time");
 
+
             }
+        }
+
+        #endregion
+
+        #region IAssetService Members
+
+
+        public AssetMetadata GetMetadata(string id)
+        {
+            AssetBase asset = Get(id);
+            return asset.Metadata;
+        }
+
+        public byte[] GetData(string id)
+        {
+            AssetBase asset = Get(id);
+            return asset.Data;
+        }
+
+        public bool Get(string id, object sender, AssetRetrieved handler)
+        {
+            AssetBase asset = Get(id);
+            handler(id, sender, asset);
+            return true;
+        }
+
+        public string Store(AssetBase asset)
+        {
+            if ((asset.FullID == null) || (asset.FullID == UUID.Zero))
+            {
+                asset.FullID = UUID.Random();
+            }
+
+            Cache(asset);
+
+            return asset.ID;
+
+        }
+
+        public bool UpdateContent(string id, byte[] data)
+        {
+            AssetBase asset = Get(id);
+            asset.Data = data;
+            Cache(asset);
+            return true;
+        }
+
+        public bool Delete(string id)
+        {
+            Expire(id);
+            return true;
         }
 
         #endregion

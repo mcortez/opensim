@@ -137,6 +137,8 @@ namespace OpenSim.Region.Framework.Scenes
         protected IAssetService m_AssetService = null;
         protected IAuthorizationService m_AuthorizationService = null;
 
+        private Object m_heartbeatLock = new Object();
+
         public IAssetService AssetService
         {
             get
@@ -901,7 +903,6 @@ namespace OpenSim.Region.Framework.Scenes
             //m_heartbeatTimer.Elapsed += new ElapsedEventHandler(Heartbeat);
             if (HeartbeatThread != null)
             {
-                ThreadTracker.Remove(HeartbeatThread);
                 HeartbeatThread.Abort();
                 HeartbeatThread = null;
             }
@@ -910,7 +911,6 @@ namespace OpenSim.Region.Framework.Scenes
             HeartbeatThread.SetApartmentState(ApartmentState.MTA);
             HeartbeatThread.Name = string.Format("Heartbeat for region {0}", RegionInfo.RegionName);
             HeartbeatThread.Priority = ThreadPriority.AboveNormal;
-            ThreadTracker.Add(HeartbeatThread);
             HeartbeatThread.Start();
         }
 
@@ -942,6 +942,9 @@ namespace OpenSim.Region.Framework.Scenes
         /// <param name="e"></param>
         private void Heartbeat(object sender)
         {
+            if (!Monitor.TryEnter(m_heartbeatLock))
+                return;
+
             try
             {
                 Update();
@@ -951,6 +954,11 @@ namespace OpenSim.Region.Framework.Scenes
             }
             catch (ThreadAbortException)
             {
+            }
+            finally
+            {
+                Monitor.Pulse(m_heartbeatLock);
+                Monitor.Exit(m_heartbeatLock);
             }
         }
 
@@ -962,6 +970,12 @@ namespace OpenSim.Region.Framework.Scenes
             int maintc = 0;
             while (!shuttingdown)
             {
+//#if DEBUG
+//                int w = 0, io = 0;
+//                ThreadPool.GetAvailableThreads(out w, out io);
+//                if ((w < 10) || (io < 10))
+//                    m_log.DebugFormat("[WARNING]: ThreadPool reaching exhaustion. workers = {0}; io = {1}", w, io);
+//#endif
                 maintc = Environment.TickCount;
 
                 TimeSpan SinceLastFrame = DateTime.Now - m_lastupdate;
@@ -1432,6 +1446,9 @@ namespace OpenSim.Region.Framework.Scenes
             m_log.Info("[SCENE]: Loading objects from datastore");
 
             List<SceneObjectGroup> PrimsFromDB = m_storageManager.DataStore.LoadObjects(regionID);
+
+            m_log.Info("[SCENE]: Loaded " + PrimsFromDB.Count + " objects from the datastore");
+
             foreach (SceneObjectGroup group in PrimsFromDB)
             {
                 if (group.RootPart == null)
@@ -2267,75 +2284,73 @@ namespace OpenSim.Region.Framework.Scenes
             foreach (SceneObjectPart p in sceneObject.Children.Values)
                 p.LocalId = 0;
 
-            if (sceneObject.RootPart.Shape.PCode == (byte)PCode.Prim)
+            if ((sceneObject.RootPart.Shape.PCode == (byte)PCode.Prim) && (sceneObject.RootPart.Shape.State != 0)) // Attachment
             {
-                if (sceneObject.RootPart.Shape.State != 0) // Attachment
+                sceneObject.RootPart.AddFlag(PrimFlags.TemporaryOnRez);
+                sceneObject.RootPart.AddFlag(PrimFlags.Phantom);
+
+                AddRestoredSceneObject(sceneObject, false, false);
+
+                // Handle attachment special case
+                SceneObjectPart RootPrim = sceneObject.RootPart;
+
+                // Fix up attachment Parent Local ID
+                ScenePresence sp = GetScenePresence(sceneObject.OwnerID);
+
+                //uint parentLocalID = 0;
+                if (sp != null)
                 {
-                    sceneObject.RootPart.AddFlag(PrimFlags.TemporaryOnRez);
-                    sceneObject.RootPart.AddFlag(PrimFlags.Phantom);
+                    //parentLocalID = sp.LocalId;
 
-                    AddRestoredSceneObject(sceneObject, false, false);
+                    //sceneObject.RootPart.IsAttachment = true;
+                    //sceneObject.RootPart.SetParentLocalId(parentLocalID);
 
-                    // Handle attachment special case
-                    SceneObjectPart RootPrim = sceneObject.RootPart;
+                    SceneObjectGroup grp = sceneObject;
 
-                    // Fix up attachment Parent Local ID
-                    ScenePresence sp = GetScenePresence(sceneObject.OwnerID);
+                    //RootPrim.SetParentLocalId(parentLocalID);
 
-                    //uint parentLocalID = 0;
-                    if (sp != null)
-                    {
-                        //parentLocalID = sp.LocalId;
+                    m_log.DebugFormat("[ATTACHMENT]: Received " +
+                                "attachment {0}, inworld asset id {1}",
+                                //grp.RootPart.LastOwnerID.ToString(),
+                                grp.GetFromItemID(),
+                                grp.UUID.ToString());
 
-                        //sceneObject.RootPart.IsAttachment = true;
-                        //sceneObject.RootPart.SetParentLocalId(parentLocalID);
-
-                        SceneObjectGroup grp = sceneObject;
-
-                        //RootPrim.SetParentLocalId(parentLocalID);
-
-                        m_log.DebugFormat("[ATTACHMENT]: Received " +
-                                    "attachment {0}, inworld asset id {1}",
-                                    //grp.RootPart.LastOwnerID.ToString(),
-                                    grp.GetFromItemID(),
-                                    grp.UUID.ToString());
-
-                        //grp.SetFromAssetID(grp.RootPart.LastOwnerID);
-                        m_log.DebugFormat("[ATTACHMENT]: Attach " +
-                                "to avatar {0} at position {1}",
-                                sp.UUID.ToString(), grp.AbsolutePosition);
-                        AttachObject(sp.ControllingClient,
-                                grp.LocalId, (uint)0,
-                                grp.GroupRotation,
-                                grp.AbsolutePosition, false);
-                        RootPrim.RemFlag(PrimFlags.TemporaryOnRez);
-                        grp.SendGroupFullUpdate();
-                    }
-                    else
-                    {
-                        RootPrim.RemFlag(PrimFlags.TemporaryOnRez);
-                        RootPrim.AddFlag(PrimFlags.TemporaryOnRez);
-                    }
-
+                    //grp.SetFromAssetID(grp.RootPart.LastOwnerID);
+                    m_log.DebugFormat("[ATTACHMENT]: Attach " +
+                            "to avatar {0} at position {1}",
+                            sp.UUID.ToString(), grp.AbsolutePosition);
+                    AttachObject(sp.ControllingClient,
+                            grp.LocalId, (uint)0,
+                            grp.GroupRotation,
+                            grp.AbsolutePosition, false);
+                    RootPrim.RemFlag(PrimFlags.TemporaryOnRez);
+                    grp.SendGroupFullUpdate();
                 }
                 else
                 {
-                    AddRestoredSceneObject(sceneObject, true, false);
+                    RootPrim.RemFlag(PrimFlags.TemporaryOnRez);
+                    RootPrim.AddFlag(PrimFlags.TemporaryOnRez);
+                }
 
-                    if (!Permissions.CanObjectEntry(sceneObject.UUID,
-                            true, sceneObject.AbsolutePosition))
-                    {
-                        // Deny non attachments based on parcel settings
-                        //
-                        m_log.Info("[INTERREGION]: Denied prim crossing " +
-                                "because of parcel settings");
+            }
+            else
+            {
+                AddRestoredSceneObject(sceneObject, true, false);
 
-                        DeleteSceneObject(sceneObject, false);
+                if (!Permissions.CanObjectEntry(sceneObject.UUID,
+                        true, sceneObject.AbsolutePosition))
+                {
+                    // Deny non attachments based on parcel settings
+                    //
+                    m_log.Info("[INTERREGION]: Denied prim crossing " +
+                            "because of parcel settings");
 
-                        return false;
-                    }
+                    DeleteSceneObject(sceneObject, false);
+
+                    return false;
                 }
             }
+
             return true;
         }
         #endregion
