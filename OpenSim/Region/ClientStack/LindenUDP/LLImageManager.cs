@@ -167,47 +167,48 @@ namespace OpenSim.Region.ClientStack.LindenUDP
             }
         }
 
-        public bool ProcessImageQueue(int count, int maxpack)
+        public bool ProcessImageQueue(int packetsToSend)
         {
-            J2KImage imagereq;
-            int numCollected = 0;
+            m_lastloopprocessed = DateTime.Now.Ticks;
+            int packetsSent = 0;
 
-            //lock (m_syncRoot)
-            //{
-                m_lastloopprocessed = DateTime.Now.Ticks;
+            while (packetsSent < packetsToSend)
+            {
+                J2KImage image = GetHighestPriorityImage();
 
-                // This can happen during Close()
-                if (m_client == null)
+                // If null was returned, the texture priority queue is currently empty
+                if (image == null)
                     return false;
-                
-                while ((imagereq = GetHighestPriorityImage()) != null)
+
+                if (image.IsDecoded)
                 {
-                    if (imagereq.IsDecoded == true)
-                    {
-                        ++numCollected;
+                    int sent;
+                    bool imageDone = image.SendPackets(m_client, packetsToSend - packetsSent, out sent);
+                    packetsSent += sent;
 
-                        if (imagereq.SendPackets(m_client, maxpack))
-                        {
-                            // Send complete. Destroy any knowledge of this transfer
-                            RemoveImageFromQueue(imagereq);
-                        }
-                    }
-
-                    if (numCollected == count)
-                        break;
+                    // If the send is complete, destroy any knowledge of this transfer
+                    if (imageDone)
+                        RemoveImageFromQueue(image);
                 }
-            //}
+                else
+                {
+                    // TODO: This is a limitation of how LLImageManager is currently
+                    // written. Undecoded textures should not be going into the priority
+                    // queue, because a high priority undecoded texture will clog up the
+                    // pipeline for a client
+                    return true;
+                }
+            }
 
             return m_priorityQueue.Count > 0;
         }
 
-        //Faux destructor
+        /// <summary>
+        /// Faux destructor
+        /// </summary>
         public void Close()
         {
             m_shuttingdown = true;
-            m_j2kDecodeModule = null;
-            m_assetCache = null;
-            m_client = null;
         }
 
         #region Priority Queue Helpers
@@ -218,13 +219,9 @@ namespace OpenSim.Region.ClientStack.LindenUDP
 
             lock (m_syncRoot)
             {
-
                 if (m_priorityQueue.Count > 0)
                 {
-                    try
-                    {
-                        image = m_priorityQueue.FindMax();
-                    }
+                    try { image = m_priorityQueue.FindMax(); }
                     catch (Exception) { }
                 }
             }
@@ -236,20 +233,14 @@ namespace OpenSim.Region.ClientStack.LindenUDP
             image.PriorityQueueHandle = null;
 
             lock (m_syncRoot)
-                try
-                {
-                    m_priorityQueue.Add(ref image.PriorityQueueHandle, image);
-                }
+                try { m_priorityQueue.Add(ref image.PriorityQueueHandle, image); }
                 catch (Exception) { }
         }
 
         void RemoveImageFromQueue(J2KImage image)
         {
             lock (m_syncRoot)
-                try
-                {
-                    m_priorityQueue.Delete(image.PriorityQueueHandle);
-                }
+                try { m_priorityQueue.Delete(image.PriorityQueueHandle); }
                 catch (Exception) { }
         }
 

@@ -634,6 +634,12 @@ namespace OpenSim.Region.OptionalModules.Agent.InternetRelayClientView.Server
         {
             get { return (uint)Util.RandomClass.Next(0,int.MaxValue); }
         }
+
+        public IPEndPoint RemoteEndPoint
+        {
+            get { return (IPEndPoint)m_client.Client.RemoteEndPoint; }
+        }
+
 #pragma warning disable 67
         public event GenericMessage OnGenericMessage;
         public event ImprovedInstantMessage OnInstantMessage;
@@ -825,7 +831,9 @@ namespace OpenSim.Region.OptionalModules.Agent.InternetRelayClientView.Server
         public event PickInfoUpdate OnPickInfoUpdate;
         public event AvatarNotesUpdate OnAvatarNotesUpdate;
         public event MuteListRequest OnMuteListRequest;
+        public event AvatarInterestUpdate OnAvatarInterestUpdate;
         public event PlacesQuery OnPlacesQuery;
+
 #pragma warning restore 67
 
         public void SetDebugPacketLevel(int newDebug)
@@ -843,7 +851,7 @@ namespace OpenSim.Region.OptionalModules.Agent.InternetRelayClientView.Server
             
         }
 
-        public void Close(bool ShutdownCircuit)
+        public void Close()
         {
             Disconnect();
         }
@@ -1562,6 +1570,11 @@ namespace OpenSim.Region.OptionalModules.Agent.InternetRelayClientView.Server
         public void SendAvatarClassifiedReply(UUID targetID, Dictionary<UUID, string> classifieds)
         {
             
+        }
+
+        public void SendAvatarInterestUpdate(IClientAPI client, uint wantmask, string wanttext, uint skillsmask, string skillstext, string languages)
+        {
+
         }
 
         public void SendParcelDwellReply(int localID, UUID parcelID, float dwell)

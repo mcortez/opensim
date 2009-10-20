@@ -239,6 +239,10 @@ namespace OpenSim
                                           "show users [full]",
                                           "Show user data", HandleShow);
 
+            m_console.Commands.AddCommand("region", false, "show connections",
+                                          "show connections",
+                                          "Show connection data", HandleShow);
+
             m_console.Commands.AddCommand("region", false, "show users full",
                                           "show users full",
                                           String.Empty, HandleShow);
@@ -624,8 +628,20 @@ namespace OpenSim
                         break;
 
                     case "save":
-                        m_log.Info("Saving configuration file: " + Application.iniFilePath);
-                        m_config.Save(Application.iniFilePath);
+                        if (cmdparams.Length < 2)
+                        {
+                            m_log.Error("SYNTAX: " + n + " SAVE FILE");
+                            return;
+                        }
+
+                        if (Application.iniFilePath == cmdparams[1])
+                        {
+                            m_log.Error("FILE can not be "+Application.iniFilePath);
+                            return;
+                        }
+
+                        m_log.Info("Saving configuration file: " + cmdparams[1]);
+                        m_config.Save(cmdparams[1]);
                         break;
                 }
             }
@@ -921,7 +937,25 @@ namespace OpenSim
                                 regionName));
                     }
 
-                    m_log.Info("");
+                    m_log.Info(String.Empty);
+                    break;
+
+                case "connections":
+                    System.Text.StringBuilder connections = new System.Text.StringBuilder("Connections:\n");
+                    m_sceneManager.ForEachScene(
+                        delegate(Scene scene)
+                        {
+                            scene.ClientManager.ForEachSync(
+                                delegate(IClientAPI client)
+                                {
+                                    connections.AppendFormat("{0}: {1} ({2}) from {3} on circuit {4}\n",
+                                        scene.RegionInfo.RegionName, client.Name, client.AgentId, client.RemoteEndPoint, client.CircuitCode);
+                                }
+                            );
+                        }
+                    );
+
+                    m_log.Info(connections.ToString());
                     break;
 
                 case "modules":

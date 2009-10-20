@@ -859,7 +859,17 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
             World.Entities.TryGetValue(objecUUID, out SensedObject);
 
             if (SensedObject == null)
+            {
+                IGroupsModule groups = World.RequestModuleInterface<IGroupsModule>();
+                if (groups != null)
+                {
+                    GroupRecord gr = groups.GetGroupRecord(objecUUID);
+                    if (gr != null)
+                        return gr.GroupName;
+                }
                 return String.Empty;
+            }
+
             return SensedObject.Name;
         }
 
@@ -4650,7 +4660,7 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
             {
                 index = src.Length + index;
             }
-            if (index >= src.Length)
+            if (index >= src.Length || index < 0)
             {
                 return 0;
             }
@@ -4675,7 +4685,7 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
             {
                 index = src.Length + index;
             }
-            if (index >= src.Length)
+            if (index >= src.Length || index < 0)
             {
                 return 0.0;
             }
@@ -4702,7 +4712,7 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
             {
                 index = src.Length + index;
             }
-            if (index >= src.Length)
+            if (index >= src.Length || index < 0)
             {
                 return String.Empty;
             }
@@ -4716,7 +4726,7 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
             {
                 index = src.Length + index;
             }
-            if (index >= src.Length)
+            if (index >= src.Length || index < 0)
             {
                 return "";
             }
@@ -4730,7 +4740,7 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
             {
                 index = src.Length + index;
             }
-            if (index >= src.Length)
+            if (index >= src.Length || index < 0)
             {
                 return new LSL_Vector(0, 0, 0);
             }
@@ -4751,7 +4761,7 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
             {
                 index = src.Length + index;
             }
-            if (index >= src.Length)
+            if (index >= src.Length || index < 0)
             {
                 return new LSL_Rotation(0, 0, 0, 1);
             }
