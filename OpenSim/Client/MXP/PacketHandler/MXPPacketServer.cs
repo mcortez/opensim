@@ -85,10 +85,7 @@ namespace OpenSim.Client.MXP.PacketHandler
 
             m_transmitter = new Transmitter(port);
 
-            m_clientThread = new Thread(StartListener);
-            m_clientThread.Name = "MXPThread";
-            m_clientThread.IsBackground = true;
-            m_clientThread.Start();
+            StartListener();
         }
 
         public void StartListener()
@@ -612,7 +609,7 @@ namespace OpenSim.Client.MXP.PacketHandler
                 agent.Appearance = new AvatarAppearance();
             }
             
-            return scene.NewUserConnection(agent, out reason);
+            return scene.NewUserConnection(agent, 0, out reason);
         }
 
         public void PrintDebugInformation()

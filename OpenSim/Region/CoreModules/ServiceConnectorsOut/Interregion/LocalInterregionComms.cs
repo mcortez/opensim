@@ -144,7 +144,7 @@ namespace OpenSim.Region.CoreModules.ServiceConnectorsOut.Interregion
          * Agent-related communications
          */
 
-        public bool SendCreateChildAgent(ulong regionHandle, AgentCircuitData aCircuit, out string reason)
+        public bool SendCreateChildAgent(ulong regionHandle, AgentCircuitData aCircuit, uint teleportFlags, out string reason)
         {
 
             foreach (Scene s in m_sceneList)
@@ -152,12 +152,14 @@ namespace OpenSim.Region.CoreModules.ServiceConnectorsOut.Interregion
                 if (s.RegionInfo.RegionHandle == regionHandle)
                 {
 //                    m_log.DebugFormat("[LOCAL COMMS]: Found region {0} to send SendCreateChildAgent", regionHandle);
-                    return s.NewUserConnection(aCircuit, out reason);
+                    return s.NewUserConnection(aCircuit, teleportFlags, out reason);
                 }
             }
 
 //            m_log.DebugFormat("[LOCAL COMMS]: Did not find region {0} for SendCreateChildAgent", regionHandle);
-            reason = "Did not find region.";
+            uint x = 0, y = 0;
+            Utils.LongToUInts(regionHandle, out x, out y);
+            reason = "Did not find region " + x + "-" + y;
             return false;
         }
 
@@ -263,8 +265,7 @@ namespace OpenSim.Region.CoreModules.ServiceConnectorsOut.Interregion
                     {
                         // We need to make a local copy of the object
                         ISceneObject sogClone = sog.CloneForNewScene();
-                        sogClone.SetState(sog.GetStateSnapshot(),
-                                s.RegionInfo.RegionID);
+                        sogClone.SetState(sog.GetStateSnapshot(), s);
                         return s.IncomingCreateObject(sogClone);
                     }
                     else
@@ -294,15 +295,15 @@ namespace OpenSim.Region.CoreModules.ServiceConnectorsOut.Interregion
 
         #region Misc
 
-        public UUID GetRegionID(ulong regionhandle)
+        public Scene GetScene(ulong regionhandle)
         {
             foreach (Scene s in m_sceneList)
             {
                 if (s.RegionInfo.RegionHandle == regionhandle)
-                    return s.RegionInfo.RegionID;
+                    return s;
             }
             // ? weird. should not happen
-            return m_sceneList[0].RegionInfo.RegionID;
+            return m_sceneList[0];
         }
 
         public bool IsLocalRegion(ulong regionhandle)

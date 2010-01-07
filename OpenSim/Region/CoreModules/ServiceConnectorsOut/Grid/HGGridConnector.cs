@@ -155,7 +155,7 @@ namespace OpenSim.Region.CoreModules.ServiceConnectorsOut.Grid
             ((ISharedRegionModule)m_GridServiceConnector).AddRegion(scene);
 
             // Yikes!! Remove this as soon as user services get refactored
-            LocalAssetServerURI = scene.CommsManager.NetworkServersInfo.UserURL;
+            LocalAssetServerURI = scene.CommsManager.NetworkServersInfo.AssetURL;
             LocalInventoryServerURI = scene.CommsManager.NetworkServersInfo.InventoryURL;
             LocalUserServerURI = scene.CommsManager.NetworkServersInfo.UserURL;
             HGNetworkServersInfo.Init(LocalAssetServerURI, LocalInventoryServerURI, LocalUserServerURI);
@@ -322,10 +322,12 @@ namespace OpenSim.Region.CoreModules.ServiceConnectorsOut.Grid
         {
             List<GridRegion> rinfos = new List<GridRegion>();
 
-            // Commenting until regionname exists
-            //foreach (SimpleRegionInfo r in m_HyperlinkRegions.Values)
-            //    if ((r.RegionName != null) && r.RegionName.StartsWith(name))
-            //        rinfos.Add(r);
+            if (name == string.Empty)
+                return rinfos;
+            
+            foreach (GridRegion r in m_HyperlinkRegions.Values)
+                if ((r.RegionName != null) && r.RegionName.ToLower().StartsWith(name.ToLower()))
+                    rinfos.Add(r);
 
             rinfos.AddRange(m_GridServiceConnector.GetRegionsByName(scopeID, name, maxNumber));
             return rinfos;
@@ -334,7 +336,7 @@ namespace OpenSim.Region.CoreModules.ServiceConnectorsOut.Grid
         public List<GridRegion> GetRegionRange(UUID scopeID, int xmin, int xmax, int ymin, int ymax)
         {
             int snapXmin = (int)(xmin / Constants.RegionSize) * (int)Constants.RegionSize;
-            int snapXmax = (int)(xmax / Constants.RegionSize) * (int)Constants.RegionSize;
+//            int snapXmax = (int)(xmax / Constants.RegionSize) * (int)Constants.RegionSize;
             int snapYmin = (int)(ymin / Constants.RegionSize) * (int)Constants.RegionSize;
             int snapYmax = (int)(ymax / Constants.RegionSize) * (int)Constants.RegionSize;
 
@@ -403,6 +405,7 @@ namespace OpenSim.Region.CoreModules.ServiceConnectorsOut.Grid
             if (parts.Length >= 2)
             {
                 portstr = parts[1];
+                //m_log.Debug("-- port = " + portstr);
                 if (!UInt32.TryParse(portstr, out port))
                     regionName = parts[1];
             }
@@ -602,21 +605,32 @@ namespace OpenSim.Region.CoreModules.ServiceConnectorsOut.Grid
         {
             CachedUserInfo uinfo = m_aScene.CommsManager.UserProfileCacheService.GetUserDetails(agentData.AgentID);
 
+            if (uinfo == null)
+                return false;
+
             if ((IsLocalUser(uinfo) && (GetHyperlinkRegion(regInfo.RegionHandle) != null)) ||
                 (!IsLocalUser(uinfo) && !IsGoingHome(uinfo, regInfo)))
             {
                 m_log.Info("[HGrid]: Local user is going to foreign region or foreign user is going elsewhere");
 
                 // Set the position of the region on the remote grid
-                ulong realHandle = FindRegionHandle(regInfo.RegionHandle);
+//                ulong realHandle = FindRegionHandle(regInfo.RegionHandle);
                 uint x = 0, y = 0;
                 Utils.LongToUInts(regInfo.RegionHandle, out x, out y);
                 GridRegion clonedRegion = new GridRegion(regInfo);
                 clonedRegion.RegionLocX = (int)x;
                 clonedRegion.RegionLocY = (int)y;
 
-                // Get the user's home region information
-                GridRegion home = m_aScene.GridService.GetRegionByUUID(m_aScene.RegionInfo.ScopeID, uinfo.UserProfile.HomeRegionID);
+                // Get the user's home region information and adapt the region handle
+                GridRegion home = GetRegionByUUID(m_aScene.RegionInfo.ScopeID, uinfo.UserProfile.HomeRegionID);
+                if (m_HyperlinkHandles.ContainsKey(uinfo.UserProfile.HomeRegionID))
+                {
+                    ulong realHandle = m_HyperlinkHandles[uinfo.UserProfile.HomeRegionID];
+                    Utils.LongToUInts(realHandle, out x, out y);
+                    m_log.DebugFormat("[HGrid]: Foreign user is going elsewhere. Adjusting home handle from {0}-{1} to {2}-{3}", home.RegionLocX, home.RegionLocY, x, y);
+                    home.RegionLocX = (int)x;
+                    home.RegionLocY = (int)y;
+                }
 
                 // Get the user's service URLs
                 string serverURI = "";
@@ -735,6 +749,9 @@ namespace OpenSim.Region.CoreModules.ServiceConnectorsOut.Grid
         // Is the user going back to the home region or the home grid?
         protected bool IsGoingHome(CachedUserInfo uinfo, GridRegion rinfo)
         {
+            if (uinfo == null)
+                return false;
+
             if (uinfo.UserProfile == null)
                 return false;
 

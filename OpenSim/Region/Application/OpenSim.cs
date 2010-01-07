@@ -67,6 +67,8 @@ namespace OpenSim
 
             IConfig startupConfig = m_config.Source.Configs["Startup"];
 
+            int stpMaxThreads = 15;
+
             if (startupConfig != null)
             {
                 m_startupCommandsFile = startupConfig.GetString("startup_console_commands_file", "startup_commands.txt");
@@ -90,10 +92,22 @@ namespace OpenSim
                             appender.File = fileName;
                             appender.ActivateOptions();
                         }
-                        m_log.InfoFormat("[LOGGING] Logging started to file {0}", appender.File);
+                        m_log.InfoFormat("[LOGGING]: Logging started to file {0}", appender.File);
                     }
                 }
+
+                string asyncCallMethodStr = startupConfig.GetString("async_call_method", String.Empty);
+                FireAndForgetMethod asyncCallMethod;
+                if (!String.IsNullOrEmpty(asyncCallMethodStr) && Utils.EnumTryParse<FireAndForgetMethod>(asyncCallMethodStr, out asyncCallMethod))
+                    Util.FireAndForgetMethod = asyncCallMethod;
+
+                stpMaxThreads = startupConfig.GetInt("MaxPoolThreads", 15);
             }
+
+            if (Util.FireAndForgetMethod == FireAndForgetMethod.SmartThreadPool)
+                Util.InitThreadPool(stpMaxThreads);
+
+            m_log.Info("[OPENSIM MAIN]: Using async_call_method " + Util.FireAndForgetMethod);
         }
 
         /// <summary>
@@ -158,6 +172,9 @@ namespace OpenSim
                 m_scriptTimer.Elapsed += RunAutoTimerScript;
             }
 
+            // Hook up to the watchdog timer
+            Watchdog.OnWatchdogTimeout += WatchdogTimeoutHandler;
+
             PrintFileToConsole("startuplogo.txt");
 
             // For now, start at the 'root' level by default
@@ -215,7 +232,7 @@ namespace OpenSim
                                           "Save named prim to XML2", SavePrimsXml2);
 
             m_console.Commands.AddCommand("region", false, "load oar",
-                                          "load oar <oar name>",
+                                          "load oar [--merge] <oar name>",
                                           "Load a region's data from OAR archive", LoadOar);
 
             m_console.Commands.AddCommand("region", false, "save oar",
@@ -326,6 +343,10 @@ namespace OpenSim
                                           "Add-InventoryHost <host>",
                                           String.Empty, RunCommand);
 
+            m_console.Commands.AddCommand("region", false, "kill uuid",
+                                          "kill uuid <UUID>",
+                                          "Kill an object by UUID", KillUUID);
+
             if (ConfigurationSettings.Standalone)
             {
                 m_console.Commands.AddCommand("region", false, "create user",
@@ -368,6 +389,14 @@ namespace OpenSim
             {
                 RunCommandScript(m_timedScript);
             }
+        }
+
+        private void WatchdogTimeoutHandler(System.Threading.Thread thread, int lastTick)
+        {
+            int now = Environment.TickCount & Int32.MaxValue;
+
+            m_log.ErrorFormat("[WATCHDOG]: Timeout detected for thread \"{0}\". ThreadState={1}. Last tick was {2}ms ago",
+                thread.Name, thread.ThreadState, now - lastTick);
         }
 
         #region Console Commands
@@ -910,8 +939,8 @@ namespace OpenSim
                     m_log.Info(String.Format("\nAgents connected: {0}\n", agents.Count));
 
                     m_log.Info(
-                        String.Format("{0,-16}{1,-16}{2,-37}{3,-11}{4,-16}", "Firstname", "Lastname",
-                                      "Agent ID", "Root/Child", "Region"));
+                        String.Format("{0,-16}{1,-16}{2,-37}{3,-11}{4,-16}{5,-30}", "Firstname", "Lastname",
+                                      "Agent ID", "Root/Child", "Region", "Position"));
 
                     foreach (ScenePresence presence in agents)
                     {
@@ -929,12 +958,13 @@ namespace OpenSim
 
                         m_log.Info(
                             String.Format(
-                                "{0,-16}{1,-16}{2,-37}{3,-11}{4,-16}",
+                                "{0,-16}{1,-16}{2,-37}{3,-11}{4,-16}{5,-30}",
                                 presence.Firstname,
                                 presence.Lastname,
                                 presence.UUID,
                                 presence.IsChildAgent ? "Child" : "Root",
-                                regionName));
+                                regionName,
+                                presence.AbsolutePosition.ToString()));
                     }
 
                     m_log.Info(String.Empty);
@@ -945,12 +975,12 @@ namespace OpenSim
                     m_sceneManager.ForEachScene(
                         delegate(Scene scene)
                         {
-                            scene.ClientManager.ForEachSync(
+                            scene.ForEachClient(
                                 delegate(IClientAPI client)
                                 {
                                     connections.AppendFormat("{0}: {1} ({2}) from {3} on circuit {4}\n",
                                         scene.RegionInfo.RegionName, client.Name, client.AgentId, client.RemoteEndPoint, client.CircuitCode);
-                                }
+                                }, false
                             );
                         }
                     );
@@ -1265,14 +1295,7 @@ namespace OpenSim
         {
             try
             {
-                if (cmdparams.Length > 2)
-                {
-                    m_sceneManager.LoadArchiveToCurrentScene(cmdparams[2]);
-                }
-                else
-                {
-                    m_sceneManager.LoadArchiveToCurrentScene(DEFAULT_OAR_BACKUP_FILENAME);
-                }
+                m_sceneManager.LoadArchiveToCurrentScene(cmdparams);
             }
             catch (Exception e)
             {
@@ -1286,14 +1309,7 @@ namespace OpenSim
         /// <param name="cmdparams"></param>
         protected void SaveOar(string module, string[] cmdparams)
         {
-            if (cmdparams.Length > 2)
-            {
-                m_sceneManager.SaveCurrentSceneToArchive(cmdparams[2]);
-            }
-            else
-            {
-                m_sceneManager.SaveCurrentSceneToArchive(DEFAULT_OAR_BACKUP_FILENAME);
-            }
+            m_sceneManager.SaveCurrentSceneToArchive(cmdparams);
         }
 
         private static string CombineParams(string[] commandParams, int pos)
@@ -1305,6 +1321,58 @@ namespace OpenSim
             }
             result = result.TrimEnd(' ');
             return result;
+        }
+
+        /// <summary>
+        /// Kill an object given its UUID.
+        /// </summary>
+        /// <param name="cmdparams"></param>
+        protected void KillUUID(string module, string[] cmdparams)
+        {
+            if (cmdparams.Length > 2)
+            {
+                UUID id = UUID.Zero;
+                SceneObjectGroup grp = null;
+                Scene sc = null;
+
+                if (!UUID.TryParse(cmdparams[2], out id))
+                {
+                    MainConsole.Instance.Output("[KillUUID]: Error bad UUID format!");
+                    return;
+                }
+
+                m_sceneManager.ForEachScene(
+                    delegate(Scene scene)
+                    {
+                        SceneObjectPart part = scene.GetSceneObjectPart(id);
+                        if (part == null)
+                            return;
+
+                        grp = part.ParentGroup;
+                        sc = scene;
+                    });
+
+                if (grp == null)
+                {
+                    MainConsole.Instance.Output(String.Format("[KillUUID]: Given UUID {0} not found!", id));
+                }
+                else
+                {
+                    MainConsole.Instance.Output(String.Format("[KillUUID]: Found UUID {0} in scene {1}", id, sc.RegionInfo.RegionName));
+                    try
+                    {
+                        sc.DeleteSceneObject(grp, false);
+                    }
+                    catch (Exception e)
+                    {
+                        m_log.ErrorFormat("[KillUUID]: Error while removing objects from scene: " + e);
+                    }
+                }
+            }
+            else
+            {
+                MainConsole.Instance.Output("[KillUUID]: Usage: kill uuid <UUID>");
+            }
         }
 
         #endregion

@@ -26,6 +26,7 @@
  */
 
 using System;
+using System.Collections;
 using OpenMetaverse;
 
 namespace OpenSim.Region.Framework.Interfaces
@@ -34,11 +35,12 @@ namespace OpenSim.Region.Framework.Interfaces
     {
         string ScriptEngineName { get; }
 
-        string GetAssemblyName(UUID itemID);
         string GetXMLState(UUID itemID);
-        bool CanBeDeleted(UUID itemID);
+        bool SetXMLState(UUID itemID, string xml);
 
         bool PostScriptEvent(UUID itemID, string name, Object[] args);
         bool PostObjectEvent(UUID itemID, string name, Object[] args);
+
+        ArrayList GetScriptErrors(UUID itemID);
     }
 }

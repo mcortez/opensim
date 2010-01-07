@@ -171,6 +171,7 @@ namespace OpenSim.Framework.Communications.Cache
             item.NextPermissions = (uint)config.GetLong("nextPermissions", 0x7FFFFFFF);
             item.EveryOnePermissions = (uint)config.GetLong("everyonePermissions", 0x7FFFFFFF);
             item.BasePermissions = (uint)config.GetLong("basePermissions", 0x7FFFFFFF);
+            item.Flags = (uint)config.GetInt("flags", 0);
 
             if (libraryFolders.ContainsKey(item.Folder))
             {
@@ -231,7 +232,26 @@ namespace OpenSim.Framework.Communications.Cache
         /// <returns></returns>
         public Dictionary<UUID, InventoryFolderImpl> RequestSelfAndDescendentFolders()
         {
-            return libraryFolders;
+            Dictionary<UUID, InventoryFolderImpl> fs = new Dictionary<UUID, InventoryFolderImpl>();
+            fs.Add(ID, this);
+            List<InventoryFolderImpl> fis = TraverseFolder(this);
+            foreach (InventoryFolderImpl f in fis)
+            {
+                fs.Add(f.ID, f);
+            }
+            //return libraryFolders;
+            return fs;
+        }
+
+        private List<InventoryFolderImpl> TraverseFolder(InventoryFolderImpl node)
+        {
+            List<InventoryFolderImpl> folders = node.RequestListOfFolderImpls();
+            List<InventoryFolderImpl> subs = new List<InventoryFolderImpl>();
+            foreach (InventoryFolderImpl f in folders)
+                subs.AddRange(TraverseFolder(f));
+
+            folders.AddRange(subs);
+            return folders;
         }
     }
 }

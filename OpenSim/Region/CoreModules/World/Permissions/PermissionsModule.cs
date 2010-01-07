@@ -144,6 +144,8 @@ namespace OpenSim.Region.CoreModules.World.Permissions
         private Dictionary<string, bool> GrantVB = new Dictionary<string, bool>();
         private Dictionary<string, bool> GrantJS = new Dictionary<string, bool>();
         private Dictionary<string, bool> GrantYP = new Dictionary<string, bool>();
+        private IFriendsModule m_friendsModule = null;
+
         #endregion
 
         #region IRegionModule Members
@@ -363,6 +365,12 @@ namespace OpenSim.Region.CoreModules.World.Permissions
 
         public void PostInitialise()
         {
+            m_friendsModule = m_scene.RequestModuleInterface<IFriendsModule>();
+
+            if (m_friendsModule == null)
+                m_log.Error("[PERMISSIONS]: Friends module not found, friend permissions will not work");
+            else
+                m_log.Info("[PERMISSIONS]: Friends module found, friend permissions enabled");
         }
 
         public void Close()
@@ -476,6 +484,24 @@ namespace OpenSim.Region.CoreModules.World.Permissions
 
             return false;
         }
+        protected bool IsFriendWithPerms(UUID user,UUID objectOwner)
+        {
+            
+            if (user == UUID.Zero)
+                return false;
+
+            if (m_friendsModule == null)
+                return false;
+
+            List<FriendListItem> profile = m_friendsModule.GetUserFriends(user);
+
+            foreach (FriendListItem item in profile)
+            {
+                if (item.Friend == objectOwner && (item.FriendPerms & (uint)FriendRights.CanModifyObjects) != 0)
+                    return true;
+            }
+            return false;
+        }
 
         protected bool IsEstateManager(UUID user)
         {
@@ -565,9 +591,12 @@ namespace OpenSim.Region.CoreModules.World.Permissions
             // Object owners should be able to edit their own content
             if (user == objectOwner)
                 return objectOwnerMask;
+            
+            if (IsFriendWithPerms(user, objectOwner))
+                return objectOwnerMask;
 
             // Estate users should be able to edit anything in the sim
-            if (IsEstateManager(user) && m_RegionOwnerIsGod && !IsAdministrator(objectOwner))
+            if (IsEstateManager(user) && m_RegionOwnerIsGod && (!IsAdministrator(objectOwner)) || objectOwner == user)
                 return objectOwnerMask;
 
             // Admin should be able to edit anything in the sim (including admin objects)
@@ -772,29 +801,30 @@ namespace OpenSim.Region.CoreModules.World.Permissions
     
         protected bool GenericParcelOwnerPermission(UUID user, ILandObject parcel, ulong groupPowers)
         {
-            bool permission = false;
-
             if (parcel.LandData.OwnerID == user)
             {
-                permission = true;
+                // Returning immediately so that group deeded objects on group deeded land don't trigger a NRE on
+                // the subsequent redundant checks when using lParcelMediaCommandList()
+                // See http://opensimulator.org/mantis/view.php?id=3999 for more details
+                return true;
             }
 
             if (parcel.LandData.IsGroupOwned && IsGroupMember(parcel.LandData.GroupID, user, groupPowers))
             {
-                permission = true;
+                return true;
             }
     
             if (IsEstateManager(user))
             {
-                permission = true;
+                return true;
             }
 
             if (IsAdministrator(user))
             {
-                permission = true;
+                return true;
             }
 
-            return permission;
+            return false;
         }
 
         protected bool GenericParcelPermission(UUID user, Vector3 pos, ulong groupPowers)
@@ -857,6 +887,9 @@ namespace OpenSim.Region.CoreModules.World.Permissions
         {
             DebugPermissionInformation(MethodInfo.GetCurrentMethod().Name);
             if (m_bypassPermissions) return m_bypassPermissionsValue;
+
+            if (IsEstateManager(user) && m_RegionOwnerIsGod)
+                return true;
 
             return IsAdministrator(user);
         }

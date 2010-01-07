@@ -124,7 +124,6 @@ namespace OpenSim.Region.CoreModules.Scripting.DynamicTexture
         {
             if (RenderPlugins.ContainsKey(contentType))
             {
-
                 DynamicTextureUpdater updater = new DynamicTextureUpdater();
                 updater.SimUUID = simID;
                 updater.PrimID = primID;
@@ -275,7 +274,6 @@ namespace OpenSim.Region.CoreModules.Scripting.DynamicTexture
             /// </summary>
             public void DataReceived(byte[] data, Scene scene)
             {
-
                 SceneObjectPart part = scene.GetSceneObjectPart(PrimID);
 
                 if (part == null || data == null || data.Length <= 1)
@@ -311,11 +309,8 @@ namespace OpenSim.Region.CoreModules.Scripting.DynamicTexture
                 }
 
                 // Create a new asset for user
-                AssetBase asset = new AssetBase();
-                asset.FullID = UUID.Random();
+                AssetBase asset = new AssetBase(UUID.Random(), "DynamicImage" + Util.RandomClass.Next(1, 10000), (sbyte)AssetType.Texture);
                 asset.Data = assetData;
-                asset.Name = "DynamicImage" + Util.RandomClass.Next(1, 10000);
-                asset.Type = 0;
                 asset.Description = String.Format("URL image : {0}", Url);
                 asset.Local = false;
                 asset.Temporary = ((Disp & DISP_TEMP) != 0);
@@ -367,7 +362,6 @@ namespace OpenSim.Region.CoreModules.Scripting.DynamicTexture
 
                 if (oldID != UUID.Zero && ((Disp & DISP_EXPIRE) != 0))
                 {
-                    // scene.CommsManager.AssetCache.ExpireAsset(oldID);
                     scene.AssetService.Delete(oldID.ToString());
                 }
             }

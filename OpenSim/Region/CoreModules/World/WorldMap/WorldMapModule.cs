@@ -58,7 +58,7 @@ namespace OpenSim.Region.CoreModules.World.WorldMap
             LogManager.GetLogger(MethodBase.GetCurrentMethod().DeclaringType);
 
         private static readonly string DEFAULT_WORLD_MAP_EXPORT_PATH = "exportmap.jpg";
-
+        private static readonly UUID STOP_UUID = UUID.Random();
         private static readonly string m_mapLayerPath = "0001/";
 
         private OpenSim.Framework.BlockingQueue<MapRequestState> requests = new OpenSim.Framework.BlockingQueue<MapRequestState>();
@@ -74,7 +74,6 @@ namespace OpenSim.Region.CoreModules.World.WorldMap
         private Dictionary<ulong, int> m_blacklistedregions = new Dictionary<ulong, int>();
         private Dictionary<ulong, string> m_cachedRegionMapItemsAddress = new Dictionary<ulong, string>();
         private List<UUID> m_rootAgents = new List<UUID>();
-        private Thread mapItemReqThread;
         private volatile bool threadrunning = false;
 
         //private int CacheRegionsDistance = 256;
@@ -338,13 +337,10 @@ namespace OpenSim.Region.CoreModules.World.WorldMap
         {
             if (threadrunning) return;
             threadrunning = true;
+
             m_log.Debug("[WORLD MAP]: Starting remote MapItem request thread");
-            mapItemReqThread = new Thread(new ThreadStart(process));
-            mapItemReqThread.IsBackground = true;
-            mapItemReqThread.Name = "MapItemRequestThread";
-            mapItemReqThread.Priority = ThreadPriority.BelowNormal;
-            mapItemReqThread.SetApartmentState(ApartmentState.MTA);
-            mapItemReqThread.Start();
+
+            Watchdog.StartThread(process, "MapItemRequestThread", ThreadPriority.BelowNormal, true);
         }
 
         /// <summary>
@@ -353,7 +349,7 @@ namespace OpenSim.Region.CoreModules.World.WorldMap
         private void StopThread()
         {
             MapRequestState st = new MapRequestState();
-            st.agentID=UUID.Zero;
+            st.agentID=STOP_UUID;
             st.EstateID=0;
             st.flags=0;
             st.godlike=false;
@@ -441,26 +437,29 @@ namespace OpenSim.Region.CoreModules.World.WorldMap
             {
                 while (true)
                 {
-                    MapRequestState st = requests.Dequeue();
+                    MapRequestState st = requests.Dequeue(1000);
 
                     // end gracefully
-                    if (st.agentID == UUID.Zero)
-                    {
+                    if (st.agentID == STOP_UUID)
                         break;
+
+                    if (st.agentID != UUID.Zero)
+                    {
+                        bool dorequest = true;
+                        lock (m_rootAgents)
+                        {
+                            if (!m_rootAgents.Contains(st.agentID))
+                                dorequest = false;
+                        }
+
+                        if (dorequest)
+                        {
+                            OSDMap response = RequestMapItemsAsync("", st.agentID, st.flags, st.EstateID, st.godlike, st.itemtype, st.regionhandle);
+                            RequestMapItemsCompleted(response);
+                        }
                     }
 
-                    bool dorequest = true;
-                    lock (m_rootAgents)
-                    {
-                        if (!m_rootAgents.Contains(st.agentID))
-                            dorequest = false;
-                    }
-
-                    if (dorequest)
-                    {
-                        OSDMap response = RequestMapItemsAsync("", st.agentID, st.flags, st.EstateID, st.godlike, st.itemtype, st.regionhandle);
-                        RequestMapItemsCompleted(response);
-                    }
+                    Watchdog.UpdateThread();
                 }
             }
             catch (Exception e)
@@ -469,6 +468,7 @@ namespace OpenSim.Region.CoreModules.World.WorldMap
             }
 
             threadrunning = false;
+            Watchdog.RemoveThread();
         }
 
         /// <summary>
@@ -1077,14 +1077,12 @@ namespace OpenSim.Region.CoreModules.World.WorldMap
 
             m_scene.RegionInfo.RegionSettings.TerrainImageID = TerrainImageUUID;
 
-            AssetBase asset = new AssetBase();
-            asset.FullID = m_scene.RegionInfo.RegionSettings.TerrainImageID;
+            AssetBase asset = new AssetBase(
+                m_scene.RegionInfo.RegionSettings.TerrainImageID,
+                "terrainImage_" + m_scene.RegionInfo.RegionID.ToString() + "_" + lastMapRefresh.ToString(),
+                (sbyte)AssetType.Texture);
             asset.Data = data;
-            asset.Name
-                = "terrainImage_" + m_scene.RegionInfo.RegionID.ToString() + "_" + lastMapRefresh.ToString();
             asset.Description = m_scene.RegionInfo.RegionName;
-
-            asset.Type = 0;
             asset.Temporary = temporary;
             m_scene.AssetService.Store(asset);
         }
@@ -1095,7 +1093,7 @@ namespace OpenSim.Region.CoreModules.World.WorldMap
             // The reason is so we don't cause the thread to freeze waiting
             // for the 1 second it costs to start a thread manually.
             if (!threadrunning)
-                ThreadPool.QueueUserWorkItem(new WaitCallback(this.StartThread));
+                Util.FireAndForget(this.StartThread);
 
             lock (m_rootAgents)
             {

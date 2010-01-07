@@ -527,7 +527,6 @@ namespace OpenSim.Region.CoreModules.InterGrid
             userProfile.Partner = UUID.Zero;
             userProfile.PasswordHash = "$1$";
             userProfile.PasswordSalt = "";
-            userProfile.RootInventoryFolderID = UUID.Zero;
             userProfile.SurName = agentData.lastname;
             userProfile.UserAssetURI = homeScene.CommsManager.NetworkServersInfo.AssetURL;
             userProfile.UserFlags = 0;
@@ -558,7 +557,7 @@ namespace OpenSim.Region.CoreModules.InterGrid
 
             // Call 'new user' event handler
             string reason;
-            if (!homeScene.NewUserConnection(agentData, out reason))
+            if (!homeScene.NewUserConnection(agentData, (uint)TeleportFlags.ViaLogin, out reason))
             {
                 responseMap["connect"] = OSD.FromBoolean(false);
                 responseMap["message"] = OSD.FromString(String.Format("Connection refused: {0}", reason));
@@ -1208,10 +1207,7 @@ namespace OpenSim.Region.CoreModules.InterGrid
             if (homeScene.TryGetAvatar(avatarId,out avatar))
             {
                 KillAUser ku = new KillAUser(avatar,mod);
-                Thread ta = new Thread(ku.ShutdownNoLogout);
-                ta.IsBackground = true;
-                ta.Name = "ShutdownThread";
-                ta.Start();
+                Watchdog.StartThread(ku.ShutdownNoLogout, "OGPShutdown", ThreadPriority.Normal, true);
             }
         }
 
@@ -1261,7 +1257,13 @@ namespace OpenSim.Region.CoreModules.InterGrid
 
                 avToBeKilled.ControllingClient.SendLogoutPacketWhenClosing = false;
 
-                Thread.Sleep(30000);
+                int sleepMS = 30000;
+                while (sleepMS > 0)
+                {
+                    Watchdog.UpdateThread();
+                    Thread.Sleep(1000);
+                    sleepMS -= 1000;
+                }
 
                 // test for child agent because they might have come back
                 if (avToBeKilled.IsChildAgent)
@@ -1270,6 +1272,8 @@ namespace OpenSim.Region.CoreModules.InterGrid
                     avToBeKilled.ControllingClient.Close();
                 }
             }
+
+            Watchdog.RemoveThread();
         }
         
     }

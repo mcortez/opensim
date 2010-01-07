@@ -106,13 +106,20 @@ namespace OpenSim.Region.Physics.OdePlugin
             {
                 if (m_PendingRequests.Count > 0)
                 {
+                    ODERayCastRequest[] reqs = m_PendingRequests.ToArray();
+                    for (int i = 0; i < reqs.Length; i++)
+                    {
+                        if (reqs[i].callbackMethod != null) // quick optimization here, don't raycast 
+                            RayCast(reqs[i]);               // if there isn't anyone to send results
+                    }
+                    /*
                     foreach (ODERayCastRequest req in m_PendingRequests)
                     {
                         if (req.callbackMethod != null) // quick optimization here, don't raycast 
                             RayCast(req);               // if there isn't anyone to send results to
                             
                     }
-
+                    */
                     m_PendingRequests.Clear();
                 }
             }
@@ -145,6 +152,7 @@ namespace OpenSim.Region.Physics.OdePlugin
             uint hitConsumerID = 0;
             float distance = 999999999999f;
             Vector3 closestcontact = new Vector3(99999f, 99999f, 99999f);
+            Vector3 snormal = Vector3.Zero;
 
             // Find closest contact and object.
             lock (m_contactResults)
@@ -157,6 +165,7 @@ namespace OpenSim.Region.Physics.OdePlugin
                         hitConsumerID = cResult.ConsumerID;
                         distance = cResult.Depth;
                         hitYN = true;
+                        snormal = cResult.Normal;
                     }
                 }
 
@@ -165,7 +174,7 @@ namespace OpenSim.Region.Physics.OdePlugin
 
             // Return results
             if (req.callbackMethod != null)
-                req.callbackMethod(hitYN, closestcontact, hitConsumerID, distance);
+                req.callbackMethod(hitYN, closestcontact, hitConsumerID, distance, snormal);
         }
 
         // This is the standard Near.   Uses space AABBs to speed up detection.
@@ -310,7 +319,8 @@ namespace OpenSim.Region.Physics.OdePlugin
                         collisionresult.ConsumerID = ((OdePrim)p1).m_localID;
                         collisionresult.Pos = new Vector3(contacts[i].pos.X, contacts[i].pos.Y, contacts[i].pos.Z);
                         collisionresult.Depth = contacts[i].depth;
-                        
+                        collisionresult.Normal = new Vector3(contacts[i].normal.X, contacts[i].normal.Y,
+                                                             contacts[i].normal.Z);
                         lock (m_contactResults)
                             m_contactResults.Add(collisionresult);
                     }
@@ -325,6 +335,8 @@ namespace OpenSim.Region.Physics.OdePlugin
                         collisionresult.ConsumerID = ((OdePrim)p2).m_localID;
                         collisionresult.Pos = new Vector3(contacts[i].pos.X, contacts[i].pos.Y, contacts[i].pos.Z);
                         collisionresult.Depth = contacts[i].depth;
+                        collisionresult.Normal = new Vector3(contacts[i].normal.X, contacts[i].normal.Y,
+                                      contacts[i].normal.Z);
 
                         lock (m_contactResults)
                             m_contactResults.Add(collisionresult);
@@ -358,5 +370,6 @@ namespace OpenSim.Region.Physics.OdePlugin
         public Vector3 Pos;
         public float Depth;
         public uint ConsumerID;
+        public Vector3 Normal;
     }
 }

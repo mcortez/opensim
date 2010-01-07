@@ -78,8 +78,6 @@ namespace OpenSim.Grid.UserServer.Modules
         private OpenSim.Framework.BlockingQueue<PresenceNotification> m_NotifyQueue =
                 new OpenSim.Framework.BlockingQueue<PresenceNotification>();
 
-        Thread m_NotifyThread;
-
         private IGridServiceCore m_core;
 
         public event AgentLocationDelegate OnAgentLocation;
@@ -96,8 +94,8 @@ namespace OpenSim.Grid.UserServer.Modules
         {
             m_core = core;
             m_core.RegisterInterface<MessageServersConnector>(this);
-            m_NotifyThread = new Thread(new ThreadStart(NotifyQueueRunner));
-            m_NotifyThread.Start();
+
+            Watchdog.StartThread(NotifyQueueRunner, "NotifyQueueRunner", ThreadPriority.Normal, true);
         }
 
         public void PostInitialise()
@@ -203,6 +201,7 @@ namespace OpenSim.Grid.UserServer.Modules
             }
             return response;
         }
+        
         public XmlRpcResponse XmlRPCUserMovedtoRegion(XmlRpcRequest request, IPEndPoint remoteClient)
         {
             XmlRpcResponse response = new XmlRpcResponse();
@@ -427,6 +426,8 @@ namespace OpenSim.Grid.UserServer.Modules
                 {
                     TellMessageServersAboutUserLogoffInternal(presence.agentID);
                 }
+
+                Watchdog.UpdateThread();
             }
         }
 

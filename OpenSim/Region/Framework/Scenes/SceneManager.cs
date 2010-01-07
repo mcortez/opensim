@@ -241,24 +241,24 @@ namespace OpenSim.Region.Framework.Scenes
         /// Save the current scene to an OpenSimulator archive.  This archive will eventually include the prim's assets
         /// as well as the details of the prims themselves.
         /// </summary>
-        /// <param name="filename"></param>
-        public void SaveCurrentSceneToArchive(string filename)
+        /// <param name="cmdparams"></param>
+        public void SaveCurrentSceneToArchive(string[] cmdparams)
         {
             IRegionArchiverModule archiver = CurrentOrFirstScene.RequestModuleInterface<IRegionArchiverModule>();
             if (archiver != null)
-                archiver.ArchiveRegion(filename);
+                archiver.HandleSaveOarConsoleCommand(string.Empty, cmdparams);
         }
 
         /// <summary>
         /// Load an OpenSim archive into the current scene.  This will load both the shapes of the prims and upload
         /// their assets to the asset service.
         /// </summary>
-        /// <param name="filename"></param>
-        public void LoadArchiveToCurrentScene(string filename)
+        /// <param name="cmdparams"></param>
+        public void LoadArchiveToCurrentScene(string[] cmdparams)
         {
             IRegionArchiverModule archiver = CurrentOrFirstScene.RequestModuleInterface<IRegionArchiverModule>();
             if (archiver != null)
-                archiver.DearchiveRegion(filename);
+                archiver.HandleLoadOarConsoleCommand(string.Empty, cmdparams);
         }
 
         public string SaveCurrentSceneMapToXmlString()
@@ -411,41 +411,46 @@ namespace OpenSim.Region.Framework.Scenes
         /// <param name="newDebug"></param>
         public void SetDebugPacketLevelOnCurrentScene(int newDebug)
         {
-            ForEachCurrentScene(delegate(Scene scene)
-                                {
-                                    List<ScenePresence> scenePresences = scene.GetScenePresences();
+            ForEachCurrentScene(
+                delegate(Scene scene)
+                {
+                    ScenePresence[] scenePresences = scene.GetScenePresences();
 
-                                    foreach (ScenePresence scenePresence in scenePresences)
-                                    {
-                                        if (!scenePresence.IsChildAgent)
-                                        {
-                                            m_log.ErrorFormat("Packet debug for {0} {1} set to {2}",
-                                                              scenePresence.Firstname,
-                                                              scenePresence.Lastname,
-                                                              newDebug);
+                    for (int i = 0; i < scenePresences.Length; i++)
+                    {
+                        ScenePresence scenePresence = scenePresences[i];
 
-                                            scenePresence.ControllingClient.SetDebugPacketLevel(newDebug);
-                                        }
-                                    }
-                                });
+                        if (!scenePresence.IsChildAgent)
+                        {
+                            m_log.ErrorFormat("Packet debug for {0} {1} set to {2}",
+                                              scenePresence.Firstname,
+                                              scenePresence.Lastname,
+                                              newDebug);
+
+                            scenePresence.ControllingClient.SetDebugPacketLevel(newDebug);
+                        }
+                    }
+                }
+            );
         }
 
         public List<ScenePresence> GetCurrentSceneAvatars()
         {
             List<ScenePresence> avatars = new List<ScenePresence>();
 
-            ForEachCurrentScene(delegate(Scene scene)
-            {
-                List<ScenePresence> scenePresences = scene.GetScenePresences();
-
-                foreach (ScenePresence scenePresence in scenePresences)
+            ForEachCurrentScene(
+                delegate(Scene scene)
                 {
-                    if (!scenePresence.IsChildAgent)
+                    ScenePresence[] scenePresences = scene.GetScenePresences();
+
+                    for (int i = 0; i < scenePresences.Length; i++)
                     {
-                        avatars.Add(scenePresence);
+                        ScenePresence scenePresence = scenePresences[i];
+                        if (!scenePresence.IsChildAgent)
+                            avatars.Add(scenePresence);
                     }
                 }
-            });
+            );
 
             return avatars;
         }
@@ -456,7 +461,7 @@ namespace OpenSim.Region.Framework.Scenes
 
             ForEachCurrentScene(delegate(Scene scene)
             {
-                List<ScenePresence> scenePresences = scene.GetScenePresences();
+                ScenePresence[] scenePresences = scene.GetScenePresences();
                 presences.AddRange(scenePresences);
             });
 

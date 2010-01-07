@@ -327,6 +327,7 @@ namespace OpenSim.Client.VWoHTTP.ClientStack
         public event FriendActionDelegate OnApproveFriendRequest = delegate { };
         public event FriendActionDelegate OnDenyFriendRequest = delegate { };
         public event FriendshipTermination OnTerminateFriendship = delegate { };
+        public event GrantUserFriendRights OnGrantUserRights = delegate { };
         public event MoneyTransferRequest OnMoneyTransferRequest = delegate { };
         public event EconomyDataRequest OnEconomyDataRequest = delegate { };
         public event MoneyBalanceRequest OnMoneyBalanceRequest = delegate { };
@@ -404,6 +405,26 @@ namespace OpenSim.Client.VWoHTTP.ClientStack
         public event MuteListRequest OnMuteListRequest = delegate { };
         public event AvatarInterestUpdate OnAvatarInterestUpdate = delegate { };
         public event PlacesQuery OnPlacesQuery = delegate { };
+        public event FindAgentUpdate OnFindAgent = delegate { };
+        public event TrackAgentUpdate OnTrackAgent = delegate { };
+        public event NewUserReport OnUserReport = delegate { };
+        public event SaveStateHandler OnSaveState = delegate { };
+        public event GroupAccountSummaryRequest OnGroupAccountSummaryRequest = delegate { };
+        public event GroupAccountDetailsRequest OnGroupAccountDetailsRequest = delegate { };
+        public event GroupAccountTransactionsRequest OnGroupAccountTransactionsRequest = delegate { };
+        public event FreezeUserUpdate OnParcelFreezeUser = delegate { };
+        public event EjectUserUpdate OnParcelEjectUser = delegate { };
+        public event ParcelBuyPass OnParcelBuyPass = delegate { };
+        public event ParcelGodMark OnParcelGodMark = delegate { };
+        public event GroupActiveProposalsRequest OnGroupActiveProposalsRequest = delegate { };
+        public event GroupVoteHistoryRequest OnGroupVoteHistoryRequest = delegate { };
+        public event SimWideDeletesDelegate OnSimWideDeletes = delegate { };
+        public event SendPostcard OnSendPostcard = delegate { };
+        public event MuteListEntryUpdate OnUpdateMuteListEntry = delegate { };
+        public event MuteListEntryRemove OnRemoveMuteListEntry = delegate { };
+        public event GodlikeMessage onGodlikeMessage = delegate { };
+        public event GodUpdateRegionInfoUpdate OnGodUpdateRegionInfoUpdate = delegate { };
+
 
 
         public void SetDebugPacketLevel(int newDebug)
@@ -561,12 +582,12 @@ namespace OpenSim.Client.VWoHTTP.ClientStack
             throw new System.NotImplementedException();
         }
 
-        public void SendAvatarData(ulong regionHandle, string firstName, string lastName, string grouptitle, UUID avatarID, uint avatarLocalID, Vector3 Pos, byte[] textureEntry, uint parentID, Quaternion rotation)
+        public void SendAvatarData(SendAvatarData data)
         {
             throw new System.NotImplementedException();
         }
 
-        public void SendAvatarTerseUpdate(ulong regionHandle, ushort timeDilation, uint localID, Vector3 position, Vector3 velocity, Quaternion rotation, UUID uuid)
+        public void SendAvatarTerseUpdate(SendAvatarTerseData data)
         {
             throw new System.NotImplementedException();
         }
@@ -586,17 +607,17 @@ namespace OpenSim.Client.VWoHTTP.ClientStack
             throw new System.NotImplementedException();
         }
 
-        public void SendPrimitiveToClient(ulong regionHandle, ushort timeDilation, uint localID, PrimitiveBaseShape primShape, Vector3 pos, Vector3 vel, Vector3 acc, Quaternion rotation, Vector3 rvel, uint flags, UUID objectID, UUID ownerID, string text, byte[] color, uint parentID, byte[] particleSystem, byte clickAction, byte material, byte[] textureanim, bool attachment, uint AttachPoint, UUID AssetId, UUID SoundId, double SoundVolume, byte SoundFlags, double SoundRadius)
+        public void SendPrimitiveToClient(SendPrimitiveData data)
         {
             throw new System.NotImplementedException();
         }
 
-        public void SendPrimitiveToClient(ulong regionHandle, ushort timeDilation, uint localID, PrimitiveBaseShape primShape, Vector3 pos, Vector3 vel, Vector3 acc, Quaternion rotation, Vector3 rvel, uint flags, UUID objectID, UUID ownerID, string text, byte[] color, uint parentID, byte[] particleSystem, byte clickAction, byte material)
+        public void SendPrimTerseUpdate(SendPrimitiveTerseData data)
         {
             throw new System.NotImplementedException();
         }
 
-        public void SendPrimTerseUpdate(ulong regionHandle, ushort timeDilation, uint localID, Vector3 position, Quaternion rotation, Vector3 velocity, Vector3 rotationalvelocity, byte state, UUID AssetId, UUID owner, int attachPoint)
+        public void ReprioritizeUpdates(StateUpdateTypes type, UpdatePriorityHandler handler)
         {
             throw new System.NotImplementedException();
         }
@@ -606,7 +627,7 @@ namespace OpenSim.Client.VWoHTTP.ClientStack
             throw new System.NotImplementedException();
         }
 
-        public void SendInventoryFolderDetails(UUID ownerID, UUID folderID, List<InventoryItemBase> items, List<InventoryFolderBase> folders, bool fetchFolders, bool fetchItems)
+        public void SendInventoryFolderDetails(UUID ownerID, UUID folderID, List<InventoryItemBase> items, List<InventoryFolderBase> folders, int version, bool fetchFolders, bool fetchItems)
         {
             throw new System.NotImplementedException();
         }
@@ -1157,6 +1178,22 @@ namespace OpenSim.Client.VWoHTTP.ClientStack
         #endregion
 
         public void SendRebakeAvatarTextures(UUID textureID)
+        {
+        }
+
+        public void SendAvatarInterestsReply(UUID avatarID, uint wantMask, string wantText, uint skillsMask, string skillsText, string languages)
+        {
+        }
+
+        public void SendGroupAccountingDetails(IClientAPI sender,UUID groupID, UUID transactionID, UUID sessionID, int amt)
+        {
+        }
+        
+        public void SendGroupAccountingSummary(IClientAPI sender,UUID groupID, uint moneyAmt, int totalTier, int usedTier)
+        {
+        }
+        
+        public void SendGroupTransactionsSummaryDetails(IClientAPI sender,UUID groupID, UUID transactionID, UUID sessionID,int amt)
         {
         }
     }

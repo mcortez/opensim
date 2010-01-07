@@ -172,8 +172,6 @@ namespace OpenSim.Region.OptionalModules.ContentManagement
                 result |= Diff.ANGULARVELOCITY;
             if (!AreVectorsEquivalent(first.OffsetPosition, second.OffsetPosition))
                 result |= Diff.OFFSETPOSITION;
-            if (!AreVectorsEquivalent(first.RotationalVelocity, second.RotationalVelocity))
-                result |= Diff.ROTATIONALVELOCITY;
             if (!AreVectorsEquivalent(first.Scale, second.Scale))
                 result |= Diff.SCALE;
             if (!AreVectorsEquivalent(first.Velocity, second.Velocity))
@@ -188,7 +186,7 @@ namespace OpenSim.Region.OptionalModules.ContentManagement
             // MISC COMPARISONS (UUID, Byte)
             if (first.ClickAction != second.ClickAction)
                 result |= Diff.CLICKACTION;
-            if (first.ObjectOwner != second.ObjectOwner)
+            if (first.OwnerID != second.OwnerID)
                 result |= Diff.OBJECTOWNER;
 
 

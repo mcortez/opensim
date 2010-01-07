@@ -27,6 +27,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Collections;
 using System.Reflection;
 using System.Text;
 using System.Timers;
@@ -93,7 +94,6 @@ namespace OpenSim.Region.Framework.Scenes
 
         public void AddInventoryItem(UUID AgentID, InventoryItemBase item)
         {
-
             if (InventoryService.AddItem(item))
             {
                 int userlevel = 0;
@@ -216,13 +216,13 @@ namespace OpenSim.Region.Framework.Scenes
         /// <param name="primID">The prim which contains the item to update</param>
         /// <param name="isScriptRunning">Indicates whether the script to update is currently running</param>
         /// <param name="data"></param>
-        public void CapsUpdateTaskInventoryScriptAsset(IClientAPI remoteClient, UUID itemId,
+        public ArrayList CapsUpdateTaskInventoryScriptAsset(IClientAPI remoteClient, UUID itemId,
                                                        UUID primId, bool isScriptRunning, byte[] data)
         {
             if (!Permissions.CanEditScript(itemId, primId, remoteClient.AgentId))
             {
                 remoteClient.SendAgentAlertMessage("Insufficient permissions to edit script", false);
-                return;
+                return new ArrayList();
             }
 
             // Retrieve group
@@ -235,7 +235,7 @@ namespace OpenSim.Region.Framework.Scenes
                     "Prim inventory update requested for item ID {0} in prim ID {1} but this prim does not exist",
                     itemId, primId);
 
-                return;
+                return new ArrayList();
             }
 
             // Retrieve item
@@ -248,7 +248,7 @@ namespace OpenSim.Region.Framework.Scenes
                         + " but the item does not exist in this inventory",
                     itemId, part.Name, part.UUID);
 
-                return;
+                return new ArrayList();
             }
 
             AssetBase asset = CreateAsset(item.Name, item.Description, (sbyte)AssetType.LSLText, data);
@@ -265,29 +265,33 @@ namespace OpenSim.Region.Framework.Scenes
             part.GetProperties(remoteClient);
 
             // Trigger rerunning of script (use TriggerRezScript event, see RezScript)
+            ArrayList errors = new ArrayList();
+
             if (isScriptRunning)
             {
                 // Needs to determine which engine was running it and use that
                 //
                 part.Inventory.CreateScriptInstance(item.ItemID, 0, false, DefaultScriptEngine, 0);
+                errors = part.Inventory.GetScriptErrors(item.ItemID);
             }
             else
             {
                 remoteClient.SendAgentAlertMessage("Script saved", false);
             }
+            return errors;
         }
 
         /// <summary>
         /// <see>CapsUpdateTaskInventoryScriptAsset(IClientAPI, UUID, UUID, bool, byte[])</see>
         /// </summary>
-        public void CapsUpdateTaskInventoryScriptAsset(UUID avatarId, UUID itemId,
+        public ArrayList CapsUpdateTaskInventoryScriptAsset(UUID avatarId, UUID itemId,
                                                         UUID primId, bool isScriptRunning, byte[] data)
         {
             ScenePresence avatar;
 
             if (TryGetAvatar(avatarId, out avatar))
             {
-                CapsUpdateTaskInventoryScriptAsset(
+                return CapsUpdateTaskInventoryScriptAsset(
                     avatar.ControllingClient, itemId, primId, isScriptRunning, data);
             }
             else
@@ -296,6 +300,7 @@ namespace OpenSim.Region.Framework.Scenes
                     "[PRIM INVENTORY]: " +
                     "Avatar {0} cannot be found to update its prim item asset",
                     avatarId);
+                return new ArrayList();
             }
         }
 
@@ -627,11 +632,8 @@ namespace OpenSim.Region.Framework.Scenes
         /// <returns></returns>
         private AssetBase CreateAsset(string name, string description, sbyte assetType, byte[] data)
         {
-            AssetBase asset = new AssetBase();
-            asset.Name = name;
+            AssetBase asset = new AssetBase(UUID.Random(), name, assetType);
             asset.Description = description;
-            asset.Type = assetType;
-            asset.FullID = UUID.Random();
             asset.Data = (data == null) ? new byte[1] : data;
 
             return asset;
@@ -807,20 +809,6 @@ namespace OpenSim.Region.Framework.Scenes
             InventoryService.DeleteFolders(remoteClient.AgentId, folderIDs);
         }
 
-        private SceneObjectGroup GetGroupByPrim(uint localID)
-        {
-            List<EntityBase> EntityList = GetEntities();
-
-            foreach (EntityBase ent in EntityList)
-            {
-                if (ent is SceneObjectGroup)
-                {
-                    if (((SceneObjectGroup) ent).HasChildPrim(localID))
-                        return (SceneObjectGroup) ent;
-                }
-            }
-            return null;
-        }
 
         /// <summary>
         /// Send the details of a prim's inventory to the client.
@@ -1175,7 +1163,13 @@ namespace OpenSim.Region.Framework.Scenes
         {
             m_log.DebugFormat("[AGENT INVENTORY]: Send Inventory Folder {0} Update to {1} {2}", folder.Name, client.FirstName, client.LastName);
             InventoryCollection contents = InventoryService.GetFolderContent(client.AgentId, folder.ID);
-            client.SendInventoryFolderDetails(client.AgentId, folder.ID, contents.Items, contents.Folders, fetchFolders, fetchItems);
+            InventoryFolderBase containingFolder = new InventoryFolderBase();
+            containingFolder.ID = folder.ID;
+            containingFolder.Owner = client.AgentId;
+            containingFolder = InventoryService.GetFolder(containingFolder);
+            int version = containingFolder.Version;
+
+            client.SendInventoryFolderDetails(client.AgentId, folder.ID, contents.Items, contents.Folders, version, fetchFolders, fetchItems);
         }
 
         /// <summary>
@@ -1734,10 +1728,19 @@ namespace OpenSim.Region.Framework.Scenes
 
                 if (folderID == UUID.Zero && folder == null)
                 {
-                    // Catch all. Use lost & found
-                    //
+                    if (action == DeRezAction.Delete)
+                    {
+                        // Deletes go to trash by default
+                        //
+                        folder = InventoryService.GetFolderForType(userID, AssetType.TrashFolder);
+                    }
+                    else
+                    {
+                        // Catch all. Use lost & found
+                        //
 
-                    folder = InventoryService.GetFolderForType(userID, AssetType.LostAndFoundFolder);
+                        folder = InventoryService.GetFolderForType(userID, AssetType.LostAndFoundFolder);
+                    }
                 }
 
                 if (folder == null) // None of the above
@@ -2049,6 +2052,13 @@ namespace OpenSim.Region.Framework.Scenes
                         group.Children.Count, remoteClient.AgentId, pos)
                         && !attachment)
                     {
+                        // The client operates in no fail mode. It will
+                        // have already removed the item from the folder
+                        // if it's no copy.
+                        // Put it back if it's not an attachment
+                        //
+                        if (((item.CurrentPermissions & (uint)PermissionMask.Copy) == 0) && (!attachment))
+                            remoteClient.SendBulkUpdateInventory(item);
                         return null;
                     }
 
@@ -2271,7 +2281,7 @@ namespace OpenSim.Region.Framework.Scenes
                         group.ClearPartAttachmentData();
                     }
                     
-                    group.UpdateGroupRotation(rot);
+                    group.UpdateGroupRotationR(rot);
                     
                     //group.ApplyPhysics(m_physicalPrim);
                     if (group.RootPart.PhysActor != null && group.RootPart.PhysActor.IsPhysical && vel != Vector3.Zero)
@@ -2351,12 +2361,6 @@ namespace OpenSim.Region.Framework.Scenes
                 item = InventoryService.GetItem(item);
 
                 presence.Appearance.SetAttachment((int)AttachmentPt, itemID, item.AssetID /*att.UUID*/);
-                IAvatarFactory ava = RequestModuleInterface<IAvatarFactory>();
-                if (ava != null)
-                {
-                    ava.UpdateDatabase(remoteClient.AgentId, presence.Appearance);
-                }
-
             }
             return att.UUID;
         }
@@ -2402,12 +2406,12 @@ namespace OpenSim.Region.Framework.Scenes
                 InventoryItemBase item = new InventoryItemBase(itemID, remoteClient.AgentId);
                 item = InventoryService.GetItem(item);
                 presence.Appearance.SetAttachment((int)AttachmentPt, itemID, item.AssetID /*att.UUID*/);
-                
+
                 if (m_AvatarFactory != null)
                 {
-                    m_log.InfoFormat("[SCENE INVENTORY]: Saving avatar attachment. AgentID:{0} ItemID:{1} AttachmentPoint:{2}", remoteClient.AgentId, itemID, AttachmentPt);
                     m_AvatarFactory.UpdateDatabase(remoteClient.AgentId, presence.Appearance);
                 }
+
             }
         }
 
@@ -2447,12 +2451,13 @@ namespace OpenSim.Region.Framework.Scenes
             if (TryGetAvatar(remoteClient.AgentId, out presence))
             {
                 presence.Appearance.DetachAttachment(itemID);
-                IAvatarFactory ava = RequestModuleInterface<IAvatarFactory>();
-                if (ava != null)
-                {
-                    ava.UpdateDatabase(remoteClient.AgentId, presence.Appearance);
-                }
 
+                // Save avatar attachment information
+                if (m_AvatarFactory != null)
+                {
+                    m_log.Info("[SCENE]: Saving avatar attachment. AgentID: " + remoteClient.AgentId + ", ItemID: " + itemID);
+                    m_AvatarFactory.UpdateDatabase(remoteClient.AgentId, presence.Appearance);
+                }
             }
 
             m_sceneGraph.DetachSingleAttachmentToInv(itemID, remoteClient);

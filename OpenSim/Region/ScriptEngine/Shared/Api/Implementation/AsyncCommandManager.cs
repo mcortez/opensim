@@ -137,11 +137,7 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
             if (cmdHandlerThread == null)
             {
                 // Start the thread that will be doing the work
-                cmdHandlerThread = new Thread(CmdHandlerThreadLoop);
-                cmdHandlerThread.Name = "AsyncLSLCmdHandlerThread";
-                cmdHandlerThread.Priority = ThreadPriority.BelowNormal;
-                cmdHandlerThread.IsBackground = true;
-                cmdHandlerThread.Start();
+                cmdHandlerThread = Watchdog.StartThread(CmdHandlerThreadLoop, "AsyncLSLCmdHandlerThread", ThreadPriority.Normal, true);
             }
         }
 
@@ -185,6 +181,8 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
                         Thread.Sleep(cmdHandlerThreadCycleSleepms);
 
                         DoOneCmdHandlerPass();
+
+                        Watchdog.UpdateThread();
                     }
                 }
                 catch
@@ -238,7 +236,8 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
             iHttpReq.StopHttpRequest(localID, itemID);
 
             IWorldComm comms = engine.World.RequestModuleInterface<IWorldComm>();
-            comms.DeleteListener(itemID);
+            if (comms != null)
+                comms.DeleteListener(itemID);
 
             IXMLRPC xmlrpc = engine.World.RequestModuleInterface<IXMLRPC>();
             xmlrpc.DeleteChannels(itemID);

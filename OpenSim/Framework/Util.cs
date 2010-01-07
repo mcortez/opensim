@@ -41,14 +41,29 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Xml;
+using System.Threading;
 using log4net;
 using Nini.Config;
 using Nwc.XmlRpc;
+using BclExtras;
 using OpenMetaverse;
 using OpenMetaverse.StructuredData;
+using Amib.Threading;
 
 namespace OpenSim.Framework
 {
+    /// <summary>
+    /// The method used by Util.FireAndForget for asynchronously firing events
+    /// </summary>
+    public enum FireAndForgetMethod
+    {
+        UnsafeQueueUserWorkItem,
+        QueueUserWorkItem,
+        BeginInvoke,
+        SmartThreadPool,
+        Thread,
+    }
+
     /// <summary>
     /// Miscellaneous utility functions
     /// </summary>
@@ -62,6 +77,9 @@ namespace OpenSim.Framework
         private static string regexInvalidFileChars = "[" + new String(Path.GetInvalidFileNameChars()) + "]";
         private static string regexInvalidPathChars = "[" + new String(Path.GetInvalidPathChars()) + "]";
         private static object XferLock = new object();
+        /// <summary>Thread pool used for Util.FireAndForget if
+        /// FireAndForgetMethod.SmartThreadPool is used</summary>
+        private static SmartThreadPool m_ThreadPool;
 
         // Unix-epoch starts at January 1st 1970, 00:00:00 UTC. And all our times in the server are (or at least should be) in UTC.
         private static readonly DateTime unixEpoch =
@@ -69,7 +87,9 @@ namespace OpenSim.Framework
 
         public static readonly Regex UUIDPattern 
             = new Regex("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$");
-        
+
+        public static FireAndForgetMethod FireAndForgetMethod = FireAndForgetMethod.SmartThreadPool;
+
         /// <summary>
         /// Linear interpolates B<->C using percent A
         /// </summary>
@@ -987,6 +1007,26 @@ namespace OpenSim.Framework
             return os;
         }
 
+        public static string GetRuntimeInformation()
+        {
+            string ru = String.Empty;
+
+            if (Environment.OSVersion.Platform == PlatformID.Unix)
+                ru = "Unix/Mono";
+            else
+                if (Environment.OSVersion.Platform == PlatformID.MacOSX)
+                    ru = "OSX/Mono";
+                else
+                {
+                    if (Type.GetType("Mono.Runtime") != null)
+                        ru = "Win/Mono";
+                    else
+                        ru = "Win/.NET";
+                }
+
+            return ru;
+        }
+
         /// <summary>
         /// Is the given string a UUID?
         /// </summary>
@@ -1269,26 +1309,130 @@ namespace OpenSim.Framework
 
         #region FireAndForget Threading Pattern
 
+        /// <summary>
+        /// Created to work around a limitation in Mono with nested delegates
+        /// </summary>
+        private class FireAndForgetWrapper
+        {
+            public void FireAndForget(System.Threading.WaitCallback callback)
+            {
+                callback.BeginInvoke(null, EndFireAndForget, callback);
+            }
+
+            public void FireAndForget(System.Threading.WaitCallback callback, object obj)
+            {
+                callback.BeginInvoke(obj, EndFireAndForget, callback);
+            }
+
+            private static void EndFireAndForget(IAsyncResult ar)
+            {
+                System.Threading.WaitCallback callback = (System.Threading.WaitCallback)ar.AsyncState;
+
+                try { callback.EndInvoke(ar); }
+                catch (Exception ex) { m_log.Error("[UTIL]: Asynchronous method threw an exception: " + ex.Message, ex); }
+
+                ar.AsyncWaitHandle.Close();
+            }
+        }
+
         public static void FireAndForget(System.Threading.WaitCallback callback)
         {
-            callback.BeginInvoke(null, EndFireAndForget, callback);
+            FireAndForget(callback, null);
+        }
+
+        public static void InitThreadPool(int maxThreads)
+        {
+            if (maxThreads < 2)
+                throw new ArgumentOutOfRangeException("maxThreads", "maxThreads must be greater than 2");
+            if (m_ThreadPool != null)
+                throw new InvalidOperationException("SmartThreadPool is already initialized");
+
+            m_ThreadPool = new SmartThreadPool(2000, maxThreads, 2);
+        }
+
+        public static int FireAndForgetCount()
+        {
+            const int MAX_SYSTEM_THREADS = 200;
+
+            switch (FireAndForgetMethod)
+            {
+                case FireAndForgetMethod.UnsafeQueueUserWorkItem:
+                case FireAndForgetMethod.QueueUserWorkItem:
+                case FireAndForgetMethod.BeginInvoke:
+                    int workerThreads, iocpThreads;
+                    ThreadPool.GetAvailableThreads(out workerThreads, out iocpThreads);
+                    return workerThreads;
+                case FireAndForgetMethod.SmartThreadPool:
+                    return m_ThreadPool.MaxThreads - m_ThreadPool.InUseThreads;
+                case FireAndForgetMethod.Thread:
+                    return MAX_SYSTEM_THREADS - System.Diagnostics.Process.GetCurrentProcess().Threads.Count;
+                default:
+                    throw new NotImplementedException();
+            }
         }
 
         public static void FireAndForget(System.Threading.WaitCallback callback, object obj)
         {
-            callback.BeginInvoke(obj, EndFireAndForget, callback);
+            switch (FireAndForgetMethod)
+            {
+                case FireAndForgetMethod.UnsafeQueueUserWorkItem:
+                    ThreadPool.UnsafeQueueUserWorkItem(callback, obj);
+                    break;
+                case FireAndForgetMethod.QueueUserWorkItem:
+                    ThreadPool.QueueUserWorkItem(callback, obj);
+                    break;
+                case FireAndForgetMethod.BeginInvoke:
+                    FireAndForgetWrapper wrapper = Singleton.GetInstance<FireAndForgetWrapper>();
+                    wrapper.FireAndForget(callback, obj);
+                    break;
+                case FireAndForgetMethod.SmartThreadPool:
+                    if (m_ThreadPool == null)
+                        m_ThreadPool = new SmartThreadPool(2000, 15, 2);
+                    m_ThreadPool.QueueWorkItem(SmartThreadPoolCallback, new object[] { callback, obj });
+                    break;
+                case FireAndForgetMethod.Thread:
+                    Thread thread = new Thread(delegate(object o) { callback(o); });
+                    thread.Start(obj);
+                    break;
+                default:
+                    throw new NotImplementedException();
+            }
         }
 
-        private static void EndFireAndForget(IAsyncResult ar)
+        private static object SmartThreadPoolCallback(object o)
         {
-            System.Threading.WaitCallback callback = (System.Threading.WaitCallback)ar.AsyncState;
+            object[] array = (object[])o;
+            WaitCallback callback = (WaitCallback)array[0];
+            object obj = array[1];
 
-            try { callback.EndInvoke(ar); }
-            catch (Exception ex) { m_log.Error("[UTIL]: Asynchronous method threw an exception: " + ex.Message, ex); }
-
-            ar.AsyncWaitHandle.Close();
+            callback(obj);
+            return null;
         }
 
         #endregion FireAndForget Threading Pattern
+        /// <summary>
+        /// Environment.TickCount is an int but it counts all 32 bits so it goes positive
+        /// and negative every 24.9 days. This trims down TickCount so it doesn't wrap
+        /// for the callers. 
+        /// This trims it to a 12 day interval so don't let your frame time get too long.
+        /// </summary>
+        /// <returns></returns>
+        public static Int32 EnvironmentTickCount()
+        {
+            return Environment.TickCount & EnvironmentTickCountMask;
+        }
+        const Int32 EnvironmentTickCountMask = 0x3fffffff;
+
+        /// <summary>
+        /// Environment.TickCount is an int but it counts all 32 bits so it goes positive
+        /// and negative every 24.9 days. Subtracts the passed value (previously fetched by
+        /// 'EnvironmentTickCount()') and accounts for any wrapping.
+        /// </summary>
+        /// <returns>subtraction of passed prevValue from current Environment.TickCount</returns>
+        public static Int32 EnvironmentTickCountSubtract(Int32 prevValue)
+        {
+            Int32 diff = EnvironmentTickCount() - prevValue;
+            return (diff >= 0) ? diff : (diff + EnvironmentTickCountMask + 1);
+        }
     }
 }

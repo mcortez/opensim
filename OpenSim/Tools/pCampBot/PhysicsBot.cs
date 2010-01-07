@@ -151,10 +151,10 @@ namespace pCampBot
             client.Throttle.Texture = 100000;
             client.Throttle.Wind = 100000;
             client.Throttle.Total = 400000;
-            client.Network.OnConnected += new NetworkManager.ConnectedCallback(this.Network_OnConnected);
-            client.Network.OnSimConnected += new NetworkManager.SimConnectedCallback(this.Network_OnConnected);
-            client.Network.OnDisconnected += new NetworkManager.DisconnectedCallback(this.Network_OnDisconnected);
-            client.Objects.OnNewPrim += Objects_NewPrim;
+            client.Network.LoginProgress += this.Network_LoginProgress;
+            client.Network.SimConnected += this.Network_SimConnected;
+            client.Network.Disconnected += this.Network_OnDisconnected;
+            client.Objects.ObjectUpdate += Objects_NewPrim;
             //client.Assets.OnAssetReceived += Asset_ReceivedCallback;
             if (client.Network.Login(firstname, lastname, password, "pCampBot", "Your name"))
             {
@@ -349,19 +349,22 @@ namespace pCampBot
             return clothfolder;
         }
 
-        public void Network_OnConnected(object sender)
+        public void Network_LoginProgress(object sender, LoginProgressEventArgs args)
         {
-            if (OnConnected != null)
+            if (args.Status == LoginStatus.Success)
             {
-                OnConnected(this, EventType.CONNECTED);
+                if (OnConnected != null)
+                {
+                    OnConnected(this, EventType.CONNECTED);
+                }
             }
         }
 
-        public void Simulator_Connected(object sender)
+        public void Network_SimConnected(object sender, SimConnectedEventArgs args)
         {
         }
 
-        public void Network_OnDisconnected(NetworkManager.DisconnectType reason, string message)
+        public void Network_OnDisconnected(object sender, DisconnectedEventArgs args)
         {
             if (OnDisconnected != null)
             {
@@ -369,8 +372,10 @@ namespace pCampBot
             }
         }
 
-        public void Objects_NewPrim(Simulator simulator, Primitive prim, ulong regionHandle, ushort timeDilation)
+        public void Objects_NewPrim(object sender, PrimEventArgs args)
         {
+            Primitive prim = args.Prim;
+
             if (prim != null)
             {
                 if (prim.Textures != null)
@@ -396,7 +401,6 @@ namespace pCampBot
                     client.Assets.RequestImage(prim.Sculpt.SculptTexture, ImageType.Normal, Asset_TextureCallback_Texture);
                 }
             }
-
         }
 
         

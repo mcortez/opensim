@@ -86,6 +86,7 @@ what it is today.
 * Kevin Cozens
 * kinoc (Daxtron Labs)
 * Kitto Flora
+* KittyLiu
 * Kurt Taylor (IBM)
 * lulurun 
 * M.Igarashi
@@ -96,6 +97,7 @@ what it is today.
 * Mike Osias (IBM)
 * Mike Pitman (IBM)
 * mikkopa/_someone - RealXtend
+* Misterblue (Intel)
 * Mircea Kitsune
 * mpallari
 * nornalbion
@@ -104,6 +106,7 @@ what it is today.
 * otakup0pe
 * ralphos
 * RemedyTomm
+* Revolution
 * Richard Alimi (IBM)
 * Rick Alther (IBM)
 * Rob Smart (IBM)
@@ -158,6 +161,7 @@ This software uses components from the following developers:
 * Nini (http://nini.sourceforge.net/)
 * log4net (http://logging.apache.org/log4net/)
 * GlynnTucker.Cache (http://gtcache.sourceforge.net/)
+* NDesk.Options 0.2.1 (http://www.ndesk.org/Options)
 
 Some plugins are based on Cable Beach
 Cable Beach is Copyright (c) 2008 Intel Corporation

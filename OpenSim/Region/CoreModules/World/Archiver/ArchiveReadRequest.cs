@@ -103,14 +103,13 @@ namespace OpenSim.Region.CoreModules.World.Archiver
             List<string> serialisedSceneObjects = new List<string>();
             List<string> serialisedParcels = new List<string>();
             string filePath = "NONE";
+
+            TarArchiveReader archive = new TarArchiveReader(m_loadStream);
+            byte[] data;
+            TarArchiveReader.TarEntryType entryType;
             
             try
             {
-                TarArchiveReader archive = new TarArchiveReader(m_loadStream);
-               
-                byte[] data;
-                TarArchiveReader.TarEntryType entryType;
-
                 while ((data = archive.ReadEntry(out filePath, out entryType)) != null)
                 {
                     //m_log.DebugFormat(
@@ -129,6 +128,9 @@ namespace OpenSim.Region.CoreModules.World.Archiver
                             successfulAssetRestores++;
                         else
                             failedAssetRestores++;
+
+                        if ((successfulAssetRestores + failedAssetRestores) % 250 == 0)
+                            m_log.Debug("[ARCHIVER]: Loaded " + successfulAssetRestores + " assets and failed to load " + failedAssetRestores + " assets...");
                     }
                     else if (!m_merge && filePath.StartsWith(ArchiveConstants.TERRAINS_PATH))
                     {
@@ -149,8 +151,6 @@ namespace OpenSim.Region.CoreModules.World.Archiver
                 }
 
                 //m_log.Debug("[ARCHIVER]: Reached end of archive");
-
-                archive.Close();
             }
             catch (Exception e)
             {
@@ -159,6 +159,10 @@ namespace OpenSim.Region.CoreModules.World.Archiver
                 m_errorMessage += e.ToString();
                 m_scene.EventManager.TriggerOarFileLoaded(m_requestId, m_errorMessage);
                 return;
+            }
+            finally
+            {
+                archive.Close();
             }
 
             m_log.InfoFormat("[ARCHIVER]: Restored {0} assets", successfulAssetRestores);
@@ -329,10 +333,12 @@ namespace OpenSim.Region.CoreModules.World.Archiver
             {
                 sbyte assetType = ArchiveConstants.EXTENSION_TO_ASSET_TYPE[extension];
 
+                if (assetType == (sbyte)AssetType.Unknown)
+                    m_log.WarnFormat("[ARCHIVER]: Importing {0} byte asset {1} with unknown type", data.Length, uuid);
+
                 //m_log.DebugFormat("[ARCHIVER]: Importing asset {0}, type {1}", uuid, assetType);
 
-                AssetBase asset = new AssetBase(new UUID(uuid), String.Empty);
-                asset.Type = assetType;
+                AssetBase asset = new AssetBase(new UUID(uuid), String.Empty, assetType);
                 asset.Data = data;
 
                 // We're relying on the asset service to do the sensible thing and not store the asset if it already
@@ -448,6 +454,8 @@ namespace OpenSim.Region.CoreModules.World.Archiver
         /// <summary>
         /// Resolve path to a working FileStream
         /// </summary>
+        /// <param name="path"></param>
+        /// <returns></returns>
         private Stream GetStream(string path)
         {
             if (File.Exists(path))
@@ -494,8 +502,9 @@ namespace OpenSim.Region.CoreModules.World.Archiver
             WebResponse response = request.GetResponse();
             Stream file = response.GetResponseStream();
 
-            if (response.ContentType != "application/x-oar")
-                throw new Exception(String.Format("{0} does not identify an OAR file", uri.ToString()));
+            // justincc: gonna ignore the content type for now and just try anything
+            //if (response.ContentType != "application/x-oar")
+            //    throw new Exception(String.Format("{0} does not identify an OAR file", uri.ToString()));
 
             if (response.ContentLength == 0)
                 throw new Exception(String.Format("{0} returned an empty file", uri.ToString()));

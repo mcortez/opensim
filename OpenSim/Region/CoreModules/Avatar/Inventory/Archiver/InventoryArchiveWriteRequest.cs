@@ -118,18 +118,18 @@ namespace OpenSim.Region.CoreModules.Avatar.Inventory.Archiver
 
         protected void ReceivedAllAssets(ICollection<UUID> assetsFoundUuids, ICollection<UUID> assetsNotFoundUuids)
         {
-            // We're almost done.  Just need to write out the control file now
-            m_archiveWriter.WriteFile(ArchiveConstants.CONTROL_FILE_PATH, Create0p1ControlFile());
-            m_log.InfoFormat("[ARCHIVER]: Added control file to archive.");
-            
             Exception reportedException = null;
             bool succeeded = true;
-
+            
             try
             {
+                // We're almost done.  Just need to write out the control file now
+                m_archiveWriter.WriteFile(ArchiveConstants.CONTROL_FILE_PATH, Create0p1ControlFile());
+                m_log.InfoFormat("[ARCHIVER]: Added control file to archive.");
+
                 m_archiveWriter.Close();
             }
-            catch (IOException e)
+            catch (Exception e)
             {
                 m_saveStream.Close();
                 reportedException = e;
@@ -217,37 +217,6 @@ namespace OpenSim.Region.CoreModules.Avatar.Inventory.Archiver
             InventoryItemBase inventoryItem = null;
             InventoryFolderBase rootFolder = m_scene.InventoryService.GetRootFolder(m_userInfo.UserProfile.ID);
 
-            // XXX: Very temporarily, drop and refetch inventory to make sure we have any newly created items in cache
-            // This will disappear very soon once we stop using the old cached inventory.
-            /*
-            m_userInfo.DropInventory();
-            m_userInfo.FetchInventory();
-            */
-
-            /*
-            if (!m_userInfo.HasReceivedInventory)
-            {
-                // If the region server has access to the user admin service (by which users are created),
-                // then we'll assume that it's okay to fiddle with the user's inventory even if they are not on the
-                // server.
-                //
-                // FIXME: FetchInventory should probably be assumed to by async anyway, since even standalones might
-                // use a remote inventory service, though this is vanishingly rare at the moment.
-                if (null == m_scene.CommsManager.UserAdminService)
-                {
-                    m_log.ErrorFormat(
-                        "[INVENTORY ARCHIVER]: Have not yet received inventory info for user {0} {1}",
-                        m_userInfo.UserProfile.Name, m_userInfo.UserProfile.ID);
-
-                    return;
-                }
-                else
-                {
-                    m_userInfo.FetchInventory();
-                }
-            }
-            */
-
             bool foundStar = false;
 
             // Eliminate double slashes and any leading / on the path.
@@ -292,40 +261,47 @@ namespace OpenSim.Region.CoreModules.Avatar.Inventory.Archiver
                 //inventoryItem = m_userInfo.RootFolder.FindItemByPath(m_invPath);
             }
 
+            if (null == inventoryFolder && null == inventoryItem)
+            {
+                // We couldn't find the path indicated 
+                string errorMessage = string.Format("Aborted save.  Could not find inventory path {0}", m_invPath);
+                m_log.ErrorFormat("[INVENTORY ARCHIVER]: {0}", errorMessage);
+                m_module.TriggerInventoryArchiveSaved(
+                    m_id, false, m_userInfo, m_invPath, m_saveStream,
+                    new Exception(errorMessage));
+                return;
+            }
+            
             m_archiveWriter = new TarArchiveWriter(m_saveStream);
 
-            if (null == inventoryFolder)
+            try
             {
-                if (null == inventoryItem)
+                if (inventoryFolder != null)
                 {
-                    // We couldn't find the path indicated 
-                    m_saveStream.Close();
-                    m_module.TriggerInventoryArchiveSaved(
-                        m_id, false, m_userInfo, m_invPath, m_saveStream,
-                        new Exception(string.Format("Could not find inventory entry at path {0}", m_invPath)));
-                    return;
+                    m_log.DebugFormat(
+                        "[INVENTORY ARCHIVER]: Found folder {0} {1} at {2}",
+                        inventoryFolder.Name, inventoryFolder.ID, m_invPath);
+    
+                    //recurse through all dirs getting dirs and files
+                    SaveInvFolder(inventoryFolder, ArchiveConstants.INVENTORY_PATH, !foundStar);
                 }
-                else
+                else if (inventoryItem != null)
                 {
                     m_log.DebugFormat(
                         "[INVENTORY ARCHIVER]: Found item {0} {1} at {2}",
                         inventoryItem.Name, inventoryItem.ID, m_invPath);
-
+    
                     SaveInvItem(inventoryItem, ArchiveConstants.INVENTORY_PATH);
                 }
+            
+                // Don't put all this profile information into the archive right now.
+                //SaveUsers();
             }
-            else
+            catch (Exception)
             {
-                m_log.DebugFormat(
-                    "[INVENTORY ARCHIVER]: Found folder {0} {1} at {2}",
-                    inventoryFolder.Name, inventoryFolder.ID, m_invPath);
-
-                //recurse through all dirs getting dirs and files
-                SaveInvFolder(inventoryFolder, ArchiveConstants.INVENTORY_PATH, !foundStar);
+                m_archiveWriter.Close();
+                throw;
             }
-
-            // Don't put all this profile information into the archive right now.
-            //SaveUsers();
             
             new AssetsRequest(
                 new AssetsArchiver(m_archiveWriter), m_assetUuids.Keys, 
@@ -396,7 +372,7 @@ namespace OpenSim.Region.CoreModules.Avatar.Inventory.Archiver
         {
             return string.Format(
                 "{0}{1}{2}/",
-                name,
+                InventoryArchiveUtils.EscapeArchivePath(name),
                 ArchiveConstants.INVENTORY_NODE_NAME_COMPONENT_SEPARATOR,
                 id);
         }
@@ -411,7 +387,7 @@ namespace OpenSim.Region.CoreModules.Avatar.Inventory.Archiver
         {
             return string.Format(
                 "{0}{1}{2}.xml",
-                name,
+                InventoryArchiveUtils.EscapeArchivePath(name),
                 ArchiveConstants.INVENTORY_NODE_NAME_COMPONENT_SEPARATOR,
                 id);
         }

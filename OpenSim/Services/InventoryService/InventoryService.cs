@@ -25,6 +25,7 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+using System;
 using System.Collections.Generic;
 using System.Reflection;
 using log4net;
@@ -102,7 +103,17 @@ namespace OpenSim.Services.InventoryService
         // See IInventoryServices
         public bool CreateUserInventory(UUID user)
         {
-            InventoryFolderBase existingRootFolder = GetRootFolder(user);
+            InventoryFolderBase existingRootFolder;
+            try
+            {
+                existingRootFolder = GetRootFolder(user);
+            }
+            catch (Exception e)
+            {
+                // Munch the exception, it has already been reported
+                //
+                return false;
+            }
 
             if (null != existingRootFolder)
             {
@@ -439,6 +450,7 @@ namespace OpenSim.Services.InventoryService
 
         public virtual bool DeleteFolders(UUID ownerID, List<UUID> folderIDs)
         {
+            m_log.InfoFormat("[INVENTORY SERVICE]: Deleting {0} folders from user {1}", folderIDs.Count, ownerID);
             foreach (UUID id in folderIDs)
             {
                 InventoryFolderBase folder = new InventoryFolderBase(id, ownerID);

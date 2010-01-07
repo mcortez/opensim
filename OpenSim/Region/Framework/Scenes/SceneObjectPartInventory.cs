@@ -26,8 +26,10 @@
  */
 
 using System;
+using System.Xml;
 using System.IO;
 using System.Collections.Generic;
+using System.Collections;
 using System.Reflection;
 using OpenMetaverse;
 using log4net;
@@ -204,6 +206,27 @@ namespace OpenSim.Region.Framework.Scenes
             }
         }
 
+        public ArrayList GetScriptErrors(UUID itemID)
+        {
+            ArrayList ret = new ArrayList();
+
+            IScriptModule[] engines = m_part.ParentGroup.Scene.RequestModuleInterfaces<IScriptModule>();
+            if (engines == null) // No engine at all
+                return ret;
+
+            foreach (IScriptModule e in engines)
+            {
+                if (e != null)
+                {
+                    ArrayList errors = e.GetScriptErrors(itemID);
+                    foreach (Object line in errors)
+                        ret.Add(line);
+                }
+            }
+
+            return ret;
+        }
+
         /// <summary>
         /// Stop all the scripts in this prim.
         /// </summary>
@@ -259,8 +282,9 @@ namespace OpenSim.Region.Framework.Scenes
                                    {
                                        m_log.ErrorFormat(
                                            "[PRIM INVENTORY]: " +
-                                           "Couldn't start script {0}, {1} since asset ID {2} could not be found",
-                                           item.Name, item.ItemID, item.AssetID);
+                                           "Couldn't start script {0}, {1} at {2} in {3} since asset ID {4} could not be found",
+                                           item.Name, item.ItemID, m_part.AbsolutePosition, 
+                                           m_part.ParentGroup.Scene.RegionInfo.RegionName, item.AssetID);
                                    }
                                    else
                                    {
@@ -282,14 +306,55 @@ namespace OpenSim.Region.Framework.Scenes
 
         private void RestoreSavedScriptState(UUID oldID, UUID newID)
         {
+            IScriptModule[] engines = m_part.ParentGroup.Scene.RequestModuleInterfaces<IScriptModule>();
+            if (engines == null) // No engine at all
+                return;
+
             if (m_part.ParentGroup.m_savedScriptState.ContainsKey(oldID))
             {
-                string fpath = Path.Combine("ScriptEngines/"+m_part.ParentGroup.Scene.RegionInfo.RegionID.ToString(),
-                                    newID.ToString()+".state");
-                FileStream fs = File.Create(fpath);
-                Byte[] buffer = enc.GetBytes(m_part.ParentGroup.m_savedScriptState[oldID]);
-                fs.Write(buffer,0,buffer.Length);
-                fs.Close();
+                XmlDocument doc = new XmlDocument();
+
+                doc.LoadXml(m_part.ParentGroup.m_savedScriptState[oldID]);
+                
+                ////////// CRUFT WARNING ///////////////////////////////////
+                //
+                // Old objects will have <ScriptState><State> ...
+                // This format is XEngine ONLY
+                //
+                // New objects have <State Engine="...." ...><ScriptState>...
+                // This can be passed to any engine
+                //
+                XmlNode n = doc.SelectSingleNode("ScriptState");
+                if (n != null) // Old format data
+                {
+                    XmlDocument newDoc = new XmlDocument();
+
+                    XmlElement rootN = newDoc.CreateElement("", "State", "");
+                    XmlAttribute uuidA = newDoc.CreateAttribute("", "UUID", "");
+                    uuidA.Value = oldID.ToString();
+                    rootN.Attributes.Append(uuidA);
+                    XmlAttribute engineA = newDoc.CreateAttribute("", "Engine", "");
+                    engineA.Value = "XEngine";
+                    rootN.Attributes.Append(engineA);
+
+                    newDoc.AppendChild(rootN);
+
+                    XmlNode stateN = newDoc.ImportNode(n, true);
+                    rootN.AppendChild(stateN);
+
+                    // This created document has only the minimun data
+                    // necessary for XEngine to parse it successfully
+
+                    m_part.ParentGroup.m_savedScriptState[oldID] = newDoc.OuterXml;
+                }
+                foreach (IScriptModule e in engines)
+                {
+                    if (e != null)
+                    {
+                        if (e.SetXMLState(newID, m_part.ParentGroup.m_savedScriptState[oldID]))
+                            break;
+                    }
+                }
                 m_part.ParentGroup.m_savedScriptState.Remove(oldID);
             }
         }
@@ -312,8 +377,9 @@ namespace OpenSim.Region.Framework.Scenes
                 {
                     m_log.ErrorFormat(
                         "[PRIM INVENTORY]: " +
-                        "Couldn't start script with ID {0} since it couldn't be found for prim {1}, {2}",
-                        itemId, m_part.Name, m_part.UUID);
+                        "Couldn't start script with ID {0} since it couldn't be found for prim {1}, {2} at {3} in {4}",
+                        itemId, m_part.Name, m_part.UUID, 
+                        m_part.AbsolutePosition, m_part.ParentGroup.Scene.RegionInfo.RegionName);
                 }
             }
         }
@@ -333,8 +399,9 @@ namespace OpenSim.Region.Framework.Scenes
             {
                 m_log.ErrorFormat(
                     "[PRIM INVENTORY]: " +
-                    "Couldn't stop script with ID {0} since it couldn't be found for prim {1}, {2}",
-                    itemId, m_part.Name, m_part.UUID);
+                    "Couldn't stop script with ID {0} since it couldn't be found for prim {1}, {2} at {3} in {4}",
+                    itemId, m_part.Name, m_part.UUID, 
+                    m_part.AbsolutePosition, m_part.ParentGroup.Scene.RegionInfo.RegionName);
             }
         }
 
@@ -522,8 +589,9 @@ namespace OpenSim.Region.Framework.Scenes
                 {
                     m_log.ErrorFormat(
                         "[PRIM INVENTORY]: " +
-                        "Tried to retrieve item ID {0} from prim {1}, {2} but the item does not exist in this inventory",
-                        item.ItemID, m_part.Name, m_part.UUID);
+                        "Tried to retrieve item ID {0} from prim {1}, {2} at {3} in {4} but the item does not exist in this inventory",
+                        item.ItemID, m_part.Name, m_part.UUID, 
+                        m_part.AbsolutePosition, m_part.ParentGroup.Scene.RegionInfo.RegionName);
                 }
             }
 
@@ -579,8 +647,9 @@ namespace OpenSim.Region.Framework.Scenes
                 {
                     m_log.ErrorFormat(
                         "[PRIM INVENTORY]: " +
-                        "Tried to remove item ID {0} from prim {1}, {2} but the item does not exist in this inventory",
-                        itemID, m_part.Name, m_part.UUID);
+                        "Tried to remove item ID {0} from prim {1}, {2} at {3} in {4} but the item does not exist in this inventory",
+                        itemID, m_part.Name, m_part.UUID, 
+                        m_part.AbsolutePosition, m_part.ParentGroup.Scene.RegionInfo.RegionName);
                 }
             }
 
@@ -857,33 +926,6 @@ namespace OpenSim.Region.Framework.Scenes
             return ret;
         }
         
-        public string[] GetScriptAssemblies()
-        {
-            IScriptModule[] engines = m_part.ParentGroup.Scene.RequestModuleInterfaces<IScriptModule>();
-
-            List<string> ret = new List<string>();
-            if (engines == null) // No engine at all
-                return new string[0];
-
-            foreach (TaskInventoryItem item in m_items.Values)
-            {
-                if (item.InvType == (int)InventoryType.LSL)
-                {
-                    foreach (IScriptModule e in engines)
-                    {
-                        string n = e.GetAssemblyName(item.ItemID);
-                        if (n != "")
-                        {
-                            if (!ret.Contains(n))
-                                ret.Add(n);
-                            break;
-                        }
-                    }
-                }
-            }
-            return ret.ToArray();
-        }
-        
         public Dictionary<UUID, string> GetScriptStates()
         {
             IScriptModule[] engines = m_part.ParentGroup.Scene.RequestModuleInterfaces<IScriptModule>();
@@ -898,42 +940,20 @@ namespace OpenSim.Region.Framework.Scenes
                 {
                     foreach (IScriptModule e in engines)
                     {
-                        string n = e.GetXMLState(item.ItemID);
-                        if (n != "")
+                        if (e != null)
                         {
-                            if (!ret.ContainsKey(item.ItemID))
-                                ret[item.ItemID] = n;
-                            break;
+                            string n = e.GetXMLState(item.ItemID);
+                            if (n != String.Empty)
+                            {
+                                if (!ret.ContainsKey(item.ItemID))
+                                    ret[item.ItemID] = n;
+                                break;
+                            }
                         }
                     }
                 }
             }
             return ret;
-        }
-
-        public bool CanBeDeleted()
-        {
-            if (!ContainsScripts())
-                return true;
-
-            IScriptModule[] engines = m_part.ParentGroup.Scene.RequestModuleInterfaces<IScriptModule>();
-
-            if (engines == null) // No engine at all
-                return true;
-
-            foreach (TaskInventoryItem item in m_items.Values)
-            {
-                if (item.InvType == (int)InventoryType.LSL)
-                {
-                    foreach (IScriptModule e in engines)
-                    {
-                        if (!e.CanBeDeleted(item.ItemID))
-                            return false;
-                    }
-                }
-            }
-
-            return true;
         }
     }
 }

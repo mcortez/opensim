@@ -26,6 +26,7 @@
  */
 
 using System.Collections.Generic;
+using System.Collections;
 using OpenMetaverse;
 using OpenSim.Framework;
 
@@ -71,6 +72,7 @@ namespace OpenSim.Region.Framework.Interfaces
         /// Start all the scripts contained in this entity's inventory
         /// </summary>
        void CreateScriptInstances(int startParam, bool postOnRez, string engine, int stateSource);
+        ArrayList GetScriptErrors(UUID itemID);
 
         /// <summary>
         /// Stop all the scripts in this entity.
@@ -185,19 +187,11 @@ namespace OpenSim.Region.Framework.Interfaces
         List<UUID> GetInventoryList();
         
         /// <summary>
-        /// Get the names of the assemblies associated with scripts in this inventory.
-        /// </summary>
-        /// <returns></returns>
-        string[] GetScriptAssemblies();
-        
-        /// <summary>
         /// Get the xml representing the saved states of scripts in this inventory.
         /// </summary>
         /// <returns>
         /// A <see cref="Dictionary`2"/>
         /// </returns>
         Dictionary<UUID, string> GetScriptStates();
-
-        bool CanBeDeleted();
     }
 }

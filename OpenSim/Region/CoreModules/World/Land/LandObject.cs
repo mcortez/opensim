@@ -49,6 +49,8 @@ namespace OpenSim.Region.CoreModules.World.Land
         #pragma warning restore 0429
         private bool[,] m_landBitmap = new bool[landArrayMax,landArrayMax];
 
+        private int m_lastSeqId = 0;
+
         protected LandData m_landData = new LandData();
         protected Scene m_scene;
         protected List<SceneObjectGroup> primsOverMe = new List<SceneObjectGroup>();
@@ -81,6 +83,10 @@ namespace OpenSim.Region.CoreModules.World.Land
         {
             m_scene = scene;
             LandData.OwnerID = owner_id;
+            if (is_group_owned)
+                LandData.GroupID = owner_id;
+            else
+                LandData.GroupID = UUID.Zero;
             LandData.IsGroupOwned = is_group_owned;
         }
 
@@ -139,10 +145,8 @@ namespace OpenSim.Region.CoreModules.World.Land
             }
             else
             {
-                //Normal Calculations
-                return Convert.ToInt32(
-                        Math.Round((Convert.ToDecimal(LandData.Area) / Convert.ToDecimal(65536)) * m_scene.objectCapacity *
-                                   Convert.ToDecimal(m_scene.RegionInfo.RegionSettings.ObjectBonus))); ;
+                // Normal Calculations
+                return (int)Math.Round(((float)LandData.Area / 65536.0f) * (float)m_scene.objectCapacity * (float)m_scene.RegionInfo.RegionSettings.ObjectBonus);
             }
         }
         public int GetSimulatorMaxPrimCount(ILandObject thisObject)
@@ -174,7 +178,19 @@ namespace OpenSim.Region.CoreModules.World.Land
 //                regionFlags |=  (uint)RegionFlags.AllowLandmark;
 //            if (landData.OwnerID == remote_client.AgentId)
 //                regionFlags |=  (uint)RegionFlags.AllowSetHome;
-            remote_client.SendLandProperties(sequence_id,
+
+            int seq_id;
+            if (snap_selection && (sequence_id == 0))
+            {
+                seq_id = m_lastSeqId;
+            }
+            else
+            {
+                seq_id = sequence_id;
+                m_lastSeqId = seq_id;
+            }
+
+            remote_client.SendLandProperties(seq_id,
                     snap_selection, request_result, LandData,
                     (float)m_scene.RegionInfo.RegionSettings.ObjectBonus,
                     GetParcelMaxPrimCount(this),
@@ -186,6 +202,7 @@ namespace OpenSim.Region.CoreModules.World.Land
             if (m_scene.Permissions.CanEditParcel(remote_client.AgentId,this))
             {
                 //Needs later group support
+                bool snap_selection = false;
                 LandData newData = LandData.Copy();
 
                 if (args.AuthBuyerID != newData.AuthBuyerID || args.SalePrice != newData.SalePrice)
@@ -194,6 +211,7 @@ namespace OpenSim.Region.CoreModules.World.Land
                     {
                         newData.AuthBuyerID = args.AuthBuyerID;
                         newData.SalePrice = args.SalePrice;
+                        snap_selection = true;
                     }
                 }
                 newData.Category = args.Category;
@@ -214,7 +232,7 @@ namespace OpenSim.Region.CoreModules.World.Land
 
                 m_scene.LandChannel.UpdateLandObject(LandData.LocalID, newData);
 
-                SendLandUpdateToAvatarsOverMe();
+                SendLandUpdateToAvatarsOverMe(snap_selection);
             }
         }
 
@@ -232,7 +250,7 @@ namespace OpenSim.Region.CoreModules.World.Land
             newData.Flags &= ~(uint) (ParcelFlags.ForSale | ParcelFlags.ForSaleObjects | ParcelFlags.SellParcelObjects);
             m_scene.LandChannel.UpdateLandObject(LandData.LocalID, newData);
 
-            SendLandUpdateToAvatarsOverMe();
+            SendLandUpdateToAvatarsOverMe(true);
         }
 
         public void DeedToGroup(UUID groupID)
@@ -244,7 +262,7 @@ namespace OpenSim.Region.CoreModules.World.Land
 
             m_scene.LandChannel.UpdateLandObject(LandData.LocalID, newData);
 
-            SendLandUpdateToAvatarsOverMe();
+            SendLandUpdateToAvatarsOverMe(true);
         }
 
         public bool IsEitherBannedOrRestricted(UUID avatar)
@@ -299,7 +317,17 @@ namespace OpenSim.Region.CoreModules.World.Land
             SendLandProperties(0, false, 0, remote_client);
         }
 
+        public void SendLandUpdateToClient(bool snap_selection, IClientAPI remote_client)
+        {
+            SendLandProperties(0, snap_selection, 0, remote_client);
+        }
+
         public void SendLandUpdateToAvatarsOverMe()
+        {
+            SendLandUpdateToAvatarsOverMe(false);
+        }
+
+        public void SendLandUpdateToAvatarsOverMe(bool snap_selection)
         {
             List<ScenePresence> avatars = m_scene.GetAvatars();
             ILandObject over = null;
@@ -327,7 +355,7 @@ namespace OpenSim.Region.CoreModules.World.Land
                         else
                             avatars[i].Invulnerable = true;
 
-                        SendLandUpdateToClient(avatars[i].ControllingClient);
+                        SendLandUpdateToClient(snap_selection, avatars[i].ControllingClient);
                     }
                 }
             }

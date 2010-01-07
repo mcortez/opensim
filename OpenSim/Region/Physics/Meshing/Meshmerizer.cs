@@ -31,7 +31,6 @@ using System.Collections.Generic;
 using OpenSim.Framework;
 using OpenSim.Region.Physics.Manager;
 using OpenMetaverse;
-using OpenMetaverse.Imaging;
 using System.Drawing;
 using System.Drawing.Imaging;
 using PrimMesher;
@@ -61,7 +60,6 @@ namespace OpenSim.Region.Physics.Meshing
     public class Meshmerizer : IMesher
     {
         private static readonly ILog m_log = LogManager.GetLogger(MethodBase.GetCurrentMethod().DeclaringType);
-        //private static readonly log4net.ILog m_log = log4net.LogManager.GetLogger(System.Reflection.MethodBase.GetCurrentMethod().DeclaringType);
 
         // Setting baseDir to a path will enable the dumping of raw files
         // raw files can be imported by blender so a visual inspection of the results can be done
@@ -160,7 +158,7 @@ namespace OpenSim.Region.Physics.Meshing
             float minZ = float.MaxValue;
             float maxZ = float.MinValue;
 
-            foreach (Vertex v in meshIn.getVertexList())
+            foreach (Vector3 v in meshIn.getVertexList())
             {
                 if (v != null)
                 {
@@ -185,7 +183,7 @@ namespace OpenSim.Region.Physics.Meshing
 
         }
 
-        private ulong GetMeshKey(PrimitiveBaseShape pbs, PhysicsVector size, float lod)
+        private ulong GetMeshKey(PrimitiveBaseShape pbs, Vector3 size, float lod)
         {
             ulong hash = 5381;
 
@@ -245,9 +243,9 @@ namespace OpenSim.Region.Physics.Meshing
             hash = ((hash << 5) + hash) + (ulong)((byte)c);
             return ((hash << 5) + hash) + (ulong)(c >> 8);
         }
-        
 
-        private Mesh CreateMeshFromPrimMesher(string primName, PrimitiveBaseShape primShape, PhysicsVector size, float lod)
+
+        private Mesh CreateMeshFromPrimMesher(string primName, PrimitiveBaseShape primShape, Vector3 size, float lod)
         {
             PrimMesh primMesh;
             PrimMesher.SculptMesh sculptMesh;
@@ -281,15 +279,18 @@ namespace OpenSim.Region.Physics.Meshing
 
                 if (idata == null)
                 {
-                    if (primShape.SculptData.Length == 0)
+                    if (primShape.SculptData == null || primShape.SculptData.Length == 0)
                         return null;
 
                     try
                     {
-                        ManagedImage managedImage;  // we never use this
-                        OpenJPEG.DecodeToImage(primShape.SculptData, out managedImage, out idata);
+                        OpenMetaverse.Imaging.ManagedImage unusedData;
+                        OpenMetaverse.Imaging.OpenJPEG.DecodeToImage(primShape.SculptData, out unusedData, out idata);
+                        unusedData = null;
 
-                        if (cacheSculptMaps)
+                        //idata = CSJ2K.J2kImage.FromBytes(primShape.SculptData);
+
+                        if (cacheSculptMaps && idata != null)
                         {
                             try { idata.Save(decodedSculptFileName, ImageFormat.MemoryBmp); }
                             catch (Exception e) { m_log.Error("[SCULPT]: unable to cache sculpt map " + decodedSculptFileName + " " + e.Message); }
@@ -302,17 +303,15 @@ namespace OpenSim.Region.Physics.Meshing
                     }
                     catch (IndexOutOfRangeException)
                     {
-                        m_log.Error("[PHYSICS]: OpenJpeg was unable to decode this.   Physics Proxy generation failed");
+                        m_log.Error("[PHYSICS]: OpenJpeg was unable to decode this. Physics Proxy generation failed");
                         return null;
                     }
-                    catch (Exception)
+                    catch (Exception ex)
                     {
-                        m_log.Error("[PHYSICS]: Unable to generate a Sculpty physics proxy.  Sculpty texture decode failed!");
+                        m_log.Error("[PHYSICS]: Unable to generate a Sculpty physics proxy. Sculpty texture decode failed: " + ex.Message);
                         return null;
                     }
                 }
-
-
 
                 PrimMesher.SculptMesh.SculptType sculptType;
                 switch ((OpenMetaverse.SculptType)primShape.SculptType)
@@ -348,7 +347,6 @@ namespace OpenSim.Region.Physics.Meshing
                 coords = sculptMesh.coords;
                 faces = sculptMesh.faces;
             }
-
             else
             {
                 float pathShearX = primShape.PathShearX < 128 ? (float)primShape.PathShearX * 0.01f : (float)(primShape.PathShearX - 256) * 0.01f;
@@ -463,6 +461,8 @@ namespace OpenSim.Region.Physics.Meshing
                 faces = primMesh.faces;
             }
 
+            // Remove the reference to any JPEG2000 sculpt data so it can be GCed
+            primShape.SculptData = Utils.EmptyBytes;
 
             int numCoords = coords.Count;
             int numFaces = faces.Count;
@@ -485,12 +485,12 @@ namespace OpenSim.Region.Physics.Meshing
             return mesh;
         }
 
-        public IMesh CreateMesh(String primName, PrimitiveBaseShape primShape, PhysicsVector size, float lod)
+        public IMesh CreateMesh(String primName, PrimitiveBaseShape primShape, Vector3 size, float lod)
         {
             return CreateMesh(primName, primShape, size, lod, false);
         }
 
-        public IMesh CreateMesh(String primName, PrimitiveBaseShape primShape, PhysicsVector size, float lod, bool isPhysical)
+        public IMesh CreateMesh(String primName, PrimitiveBaseShape primShape, Vector3 size, float lod, bool isPhysical)
         {
             Mesh mesh = null;
             ulong key = 0;

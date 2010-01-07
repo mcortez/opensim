@@ -76,7 +76,7 @@ namespace OpenSim.Framework
     {
         private static readonly ILog m_log = LogManager.GetLogger(MethodBase.GetCurrentMethod().DeclaringType);
 
-        private static readonly Primitive.TextureEntry m_defaultTexture;
+        private static readonly byte[] DEFAULT_TEXTURE = new Primitive.TextureEntry(new UUID("89556747-24cb-43ed-920b-47caed15465f")).GetBytes();
 
         private byte[] m_textureEntry;
 
@@ -104,33 +104,32 @@ namespace OpenSim.Framework
         private HollowShape _hollowShape;
 
         // Sculpted
-        [XmlIgnore] private UUID _sculptTexture = UUID.Zero;
-        [XmlIgnore] private byte _sculptType = (byte)0;
-        [XmlIgnore] private byte[] _sculptData = new byte[0];
-        [XmlIgnore] private Image _sculptBitmap = null;
+        [XmlIgnore] private UUID _sculptTexture;
+        [XmlIgnore] private byte _sculptType;
+        [XmlIgnore] private byte[] _sculptData = Utils.EmptyBytes;
 
         // Flexi
-        [XmlIgnore] private int _flexiSoftness = 0;
-        [XmlIgnore] private float _flexiTension = 0f;
-        [XmlIgnore] private float _flexiDrag = 0f;
-        [XmlIgnore] private float _flexiGravity = 0f;
-        [XmlIgnore] private float _flexiWind = 0f;
-        [XmlIgnore] private float _flexiForceX = 0f;
-        [XmlIgnore] private float _flexiForceY = 0f;
-        [XmlIgnore] private float _flexiForceZ = 0f;
+        [XmlIgnore] private int _flexiSoftness;
+        [XmlIgnore] private float _flexiTension;
+        [XmlIgnore] private float _flexiDrag;
+        [XmlIgnore] private float _flexiGravity;
+        [XmlIgnore] private float _flexiWind;
+        [XmlIgnore] private float _flexiForceX;
+        [XmlIgnore] private float _flexiForceY;
+        [XmlIgnore] private float _flexiForceZ;
 
         //Bright n sparkly
-        [XmlIgnore] private float _lightColorR = 0f;
-        [XmlIgnore] private float _lightColorG = 0f;
-        [XmlIgnore] private float _lightColorB = 0f;
-        [XmlIgnore] private float _lightColorA = 1f;
-        [XmlIgnore] private float _lightRadius = 0f;
-        [XmlIgnore] private float _lightCutoff = 0f;
-        [XmlIgnore] private float _lightFalloff = 0f;
-        [XmlIgnore] private float _lightIntensity = 1f;
-        [XmlIgnore] private bool _flexiEntry = false;
-        [XmlIgnore] private bool _lightEntry = false;
-        [XmlIgnore] private bool _sculptEntry = false;
+        [XmlIgnore] private float _lightColorR;
+        [XmlIgnore] private float _lightColorG;
+        [XmlIgnore] private float _lightColorB;
+        [XmlIgnore] private float _lightColorA = 1.0f;
+        [XmlIgnore] private float _lightRadius;
+        [XmlIgnore] private float _lightCutoff;
+        [XmlIgnore] private float _lightFalloff;
+        [XmlIgnore] private float _lightIntensity = 1.0f;
+        [XmlIgnore] private bool _flexiEntry;
+        [XmlIgnore] private bool _lightEntry;
+        [XmlIgnore] private bool _sculptEntry;
 
         public byte ProfileCurve
         {
@@ -172,17 +171,11 @@ namespace OpenSim.Framework
             }
         }
 
-        static PrimitiveBaseShape()
-        {
-            m_defaultTexture =
-                new Primitive.TextureEntry(new UUID("89556747-24cb-43ed-920b-47caed15465f"));
-        }
-
         public PrimitiveBaseShape()
         {
             PCode = (byte) PCodeEnum.Primitive;
             ExtraParams = new byte[1];
-            Textures = m_defaultTexture;
+            m_textureEntry = DEFAULT_TEXTURE;
         }
 
         public PrimitiveBaseShape(bool noShape)
@@ -192,7 +185,7 @@ namespace OpenSim.Framework
 
             PCode = (byte)PCodeEnum.Primitive;
             ExtraParams = new byte[1];
-            Textures = m_defaultTexture;
+            m_textureEntry = DEFAULT_TEXTURE;
         }
 
         [XmlIgnore]
@@ -574,15 +567,6 @@ namespace OpenSim.Framework
             }
             set {
                 _sculptData = value;
-            }
-        }
-
-        public Image SculptBitmap {
-            get {
-                return _sculptBitmap;
-            }
-            set {
-                _sculptBitmap = value;
             }
         }
 
@@ -1081,6 +1065,105 @@ namespace OpenSim.Framework
             Utils.FloatToBytes(_lightFalloff).CopyTo(data, 12);
 
             return data;
+        }
+
+
+        /// <summary>
+        /// Creates a OpenMetaverse.Primitive and populates it with converted PrimitiveBaseShape values
+        /// </summary>
+        /// <returns></returns>
+        public Primitive ToOmvPrimitive()
+        {
+            // position and rotation defaults here since they are not available in PrimitiveBaseShape
+            return ToOmvPrimitive(new Vector3(0.0f, 0.0f, 0.0f),
+                new Quaternion(0.0f, 0.0f, 0.0f, 1.0f));
+        }
+
+
+        /// <summary>
+        /// Creates a OpenMetaverse.Primitive and populates it with converted PrimitiveBaseShape values
+        /// </summary>
+        /// <param name="position"></param>
+        /// <param name="rotation"></param>
+        /// <returns></returns>
+        public Primitive ToOmvPrimitive(Vector3 position, Quaternion rotation)
+        {
+            OpenMetaverse.Primitive prim = new OpenMetaverse.Primitive();
+
+            prim.Scale = this.Scale;
+            prim.Position = position;
+            prim.Rotation = rotation;
+
+            if (this.SculptEntry)
+            {
+                prim.Sculpt = new Primitive.SculptData();
+                prim.Sculpt.Type = (OpenMetaverse.SculptType)this.SculptType;
+                prim.Sculpt.SculptTexture = this.SculptTexture;
+            }
+
+            prim.PrimData.PathShearX = this.PathShearX < 128 ? (float)this.PathShearX * 0.01f : (float)(this.PathShearX - 256) * 0.01f;
+            prim.PrimData.PathShearY = this.PathShearY < 128 ? (float)this.PathShearY * 0.01f : (float)(this.PathShearY - 256) * 0.01f;
+            prim.PrimData.PathBegin = (float)this.PathBegin * 2.0e-5f;
+            prim.PrimData.PathEnd = 1.0f - (float)this.PathEnd * 2.0e-5f;
+
+            prim.PrimData.PathScaleX = (200 - this.PathScaleX) * 0.01f;
+            prim.PrimData.PathScaleY = (200 - this.PathScaleY) * 0.01f;
+
+            prim.PrimData.PathTaperX = this.PathTaperX * 0.01f;
+            prim.PrimData.PathTaperY = this.PathTaperY * 0.01f;
+
+            prim.PrimData.PathTwistBegin = this.PathTwistBegin * 0.01f;
+            prim.PrimData.PathTwist = this.PathTwist * 0.01f;
+
+            prim.PrimData.ProfileBegin = (float)this.ProfileBegin * 2.0e-5f;
+            prim.PrimData.ProfileEnd = 1.0f - (float)this.ProfileEnd * 2.0e-5f;
+            prim.PrimData.ProfileHollow = (float)this.ProfileHollow * 2.0e-5f;
+
+            prim.PrimData.profileCurve = this.ProfileCurve;
+            prim.PrimData.ProfileHole = (HoleType)this.HollowShape;
+
+            prim.PrimData.PathCurve = (PathCurve)this.PathCurve;
+            prim.PrimData.PathRadiusOffset = 0.01f * this.PathRadiusOffset;
+            prim.PrimData.PathRevolutions = 1.0f + 0.015f * this.PathRevolutions;
+            prim.PrimData.PathSkew = 0.01f * this.PathSkew;
+
+            prim.PrimData.PCode = OpenMetaverse.PCode.Prim;
+            prim.PrimData.State = 0;
+
+            if (this.FlexiEntry)
+            {
+                prim.Flexible = new Primitive.FlexibleData();
+                prim.Flexible.Drag = this.FlexiDrag;
+                prim.Flexible.Force = new Vector3(this.FlexiForceX, this.FlexiForceY, this.FlexiForceZ);
+                prim.Flexible.Gravity = this.FlexiGravity;
+                prim.Flexible.Softness = this.FlexiSoftness;
+                prim.Flexible.Tension = this.FlexiTension;
+                prim.Flexible.Wind = this.FlexiWind;
+            }
+
+            if (this.LightEntry)
+            {
+                prim.Light = new Primitive.LightData();
+                prim.Light.Color = new Color4(this.LightColorR, this.LightColorG, this.LightColorB, this.LightColorA);
+                prim.Light.Cutoff = this.LightCutoff;
+                prim.Light.Falloff = this.LightFalloff;
+                prim.Light.Intensity = this.LightIntensity;
+                prim.Light.Radius = this.LightRadius;
+            }
+
+            prim.Textures = this.Textures;
+
+            prim.Properties = new Primitive.ObjectProperties();
+            prim.Properties.Name = "Primitive";
+            prim.Properties.Description = "";
+            prim.Properties.CreatorID = UUID.Zero;
+            prim.Properties.GroupID = UUID.Zero;
+            prim.Properties.OwnerID = UUID.Zero;
+            prim.Properties.Permissions = new Permissions();
+            prim.Properties.SalePrice = 10;
+            prim.Properties.SaleType = new SaleType();
+            
+            return prim;
         }
     }
 }

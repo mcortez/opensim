@@ -199,7 +199,7 @@ namespace OpenSim.Client.Linden
             Scene scene;
             if (TryGetRegion(regionHandle, out scene))
             {
-                return scene.NewUserConnection(agent, out reason);
+                return scene.NewUserConnection(agent, (uint)TeleportFlags.ViaLogin, out reason);
             }
             reason = "Region not found.";
             return false;
@@ -230,6 +230,10 @@ namespace OpenSim.Client.Linden
             if (TryGetRegion(region, out scene))
             {
                 return scene.RegionInfo;
+            }
+            else if (m_scenes.Count > 0)
+            {
+                return m_scenes[0].RegionInfo;
             }
             return null;
         }
@@ -286,7 +290,7 @@ namespace OpenSim.Client.Linden
             {
                 foreach (Scene nextScene in m_scenes)
                 {
-                    if (nextScene.RegionInfo.RegionName == regionName)
+                    if (nextScene.RegionInfo.RegionName.Equals(regionName, StringComparison.InvariantCultureIgnoreCase))
                     {
                         scene = nextScene;
                         return true;

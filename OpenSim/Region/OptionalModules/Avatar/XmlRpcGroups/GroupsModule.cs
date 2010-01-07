@@ -87,7 +87,6 @@ namespace OpenSim.Region.OptionalModules.Avatar.XmlRpcGroups
         
         private IGroupsServicesConnector m_groupData = null;
 
-
         // Configuration settings
         private bool m_groupsEnabled = false;
         private bool m_groupNoticesEnabled = true;
@@ -1078,7 +1077,6 @@ namespace OpenSim.Region.OptionalModules.Avatar.XmlRpcGroups
         }
 
 
-
         /// <summary>
         /// Send 'remoteClient' the group membership 'data' for agent 'dataForAgentID'.
         /// </summary>
@@ -1141,18 +1139,16 @@ namespace OpenSim.Region.OptionalModules.Avatar.XmlRpcGroups
             if (m_debugEnabled) m_log.DebugFormat("[GROUPS]: Updating scene title for {0} with title: {1}", AgentID, Title);
 
             ScenePresence presence = null;
-            lock (m_sceneList)
-            {
-                foreach (Scene scene in m_sceneList)
-                {
-                    presence = scene.GetScenePresence(AgentID);
-                    if (presence != null)
-                    {
-                        presence.Grouptitle = Title;
 
-                        // FixMe: Ter suggests a "Schedule" method that I can't find.
-                        presence.SendFullUpdateToAllClients();
-                    }
+            foreach (Scene scene in m_sceneList)
+            {
+                presence = scene.GetScenePresence(AgentID);
+                if (presence != null)
+                {
+                    presence.Grouptitle = Title;
+
+                    // FixMe: Ter suggests a "Schedule" method that I can't find.
+                    presence.SendFullUpdateToAllClients();
                 }
             }
         }

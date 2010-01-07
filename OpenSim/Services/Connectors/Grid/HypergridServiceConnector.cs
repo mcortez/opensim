@@ -92,12 +92,12 @@ namespace OpenSim.Services.Connectors.Grid
                 try
                 {
                     UUID.TryParse((string)hash["uuid"], out uuid);
-                    m_log.Debug(">> HERE, uuid: " + uuid);
+                    //m_log.Debug(">> HERE, uuid: " + uuid);
                     info.RegionID = uuid;
                     if ((string)hash["handle"] != null)
                     {
                         realHandle = Convert.ToUInt64((string)hash["handle"]);
-                        m_log.Debug(">> HERE, realHandle: " + realHandle);
+                        //m_log.Debug(">> HERE, realHandle: " + realHandle);
                     }
                     //if (hash["region_image"] != null)
                     //{
@@ -140,17 +140,19 @@ namespace OpenSim.Services.Connectors.Grid
                 Bitmap m = new Bitmap(info.RegionID.ToString() + ".jpg");
                 //m_log.Debug("Size: " + m.PhysicalDimension.Height + "-" + m.PhysicalDimension.Width);
                 byte[] imageData = OpenJPEG.EncodeFromImage(m, true);
-                AssetBase ass = new AssetBase(UUID.Random(), "region " + info.RegionID.ToString());
+                AssetBase ass = new AssetBase(UUID.Random(), "region " + info.RegionID.ToString(), (sbyte)AssetType.Texture);
                 
                 // !!! for now
                 //info.RegionSettings.TerrainImageID = ass.FullID;
 
-                ass.Type = (int)AssetType.Texture;
                 ass.Temporary = true;
                 ass.Local = true;
                 ass.Data = imageData;
 
                 m_AssetService.Store(ass);
+
+                // finally
+                info.TerrainImage = ass.FullID;
 
             }
             catch // LEGIT: Catching problems caused by OpenJPEG p/invoke

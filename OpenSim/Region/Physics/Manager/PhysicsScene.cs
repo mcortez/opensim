@@ -36,7 +36,7 @@ namespace OpenSim.Region.Physics.Manager
 {
     public delegate void physicsCrash();
 
-    public delegate void RaycastCallback(bool hitYN, Vector3 collisionPoint, uint localid, float distance);
+    public delegate void RaycastCallback(bool hitYN, Vector3 collisionPoint, uint localid, float distance, Vector3 normal);
 
     public abstract class PhysicsScene
     {
@@ -64,23 +64,28 @@ namespace OpenSim.Region.Physics.Manager
 
         public abstract void Initialise(IMesher meshmerizer, IConfigSource config);
 
-        public abstract PhysicsActor AddAvatar(string avName, PhysicsVector position, PhysicsVector size, bool isFlying);
+        public abstract PhysicsActor AddAvatar(string avName, Vector3 position, Vector3 size, bool isFlying);
 
         public abstract void RemoveAvatar(PhysicsActor actor);
 
         public abstract void RemovePrim(PhysicsActor prim);
 
-        public abstract PhysicsActor AddPrimShape(string primName, PrimitiveBaseShape pbs, PhysicsVector position,
-                                                  PhysicsVector size, Quaternion rotation); //To be removed
-        public abstract PhysicsActor AddPrimShape(string primName, PrimitiveBaseShape pbs, PhysicsVector position,
-                                                  PhysicsVector size, Quaternion rotation, bool isPhysical);
+        public abstract PhysicsActor AddPrimShape(string primName, PrimitiveBaseShape pbs, Vector3 position,
+                                                  Vector3 size, Quaternion rotation); //To be removed
+        public abstract PhysicsActor AddPrimShape(string primName, PrimitiveBaseShape pbs, Vector3 position,
+                                                  Vector3 size, Quaternion rotation, bool isPhysical);
+
+        public virtual float TimeDilation
+        {
+            get { return 1.0f; }
+        }
 
         public virtual bool SupportsNINJAJoints
         {
             get { return false; }
         }
 
-        public virtual PhysicsJoint RequestJointCreation(string objectNameInScene, PhysicsJointType jointType, PhysicsVector position,
+        public virtual PhysicsJoint RequestJointCreation(string objectNameInScene, PhysicsJointType jointType, Vector3 position,
                                             Quaternion rotation, string parms, List<string> bodyNames, string trackedBodyName, Quaternion localRotation)
         { return null; }
 
@@ -129,11 +134,11 @@ namespace OpenSim.Region.Physics.Manager
             }
         }
 
-        public virtual PhysicsVector GetJointAnchor(PhysicsJoint joint)
-        { return null; }
+        public virtual Vector3 GetJointAnchor(PhysicsJoint joint)
+        { return Vector3.Zero; }
 
-        public virtual PhysicsVector GetJointAxis(PhysicsJoint joint)
-        { return null; }
+        public virtual Vector3 GetJointAxis(PhysicsJoint joint)
+        { return Vector3.Zero; }
 
 
         public abstract void AddPhysicsActorTaint(PhysicsActor prim);
@@ -199,7 +204,7 @@ namespace OpenSim.Region.Physics.Manager
         public virtual void RaycastWorld(Vector3 position, Vector3 direction, float length, RaycastCallback retMethod)
         {
             if (retMethod != null)
-                retMethod(false, Vector3.Zero, 0, 999999999999f);
+                retMethod(false, Vector3.Zero, 0, 999999999999f, Vector3.Zero);
         }
 
         private class NullPhysicsScene : PhysicsScene
@@ -212,7 +217,7 @@ namespace OpenSim.Region.Physics.Manager
                 // Does nothing right now
             }
 
-            public override PhysicsActor AddAvatar(string avName, PhysicsVector position, PhysicsVector size, bool isFlying)
+            public override PhysicsActor AddAvatar(string avName, Vector3 position, Vector3 size, bool isFlying)
             {
                 m_log.InfoFormat("[PHYSICS]: NullPhysicsScene : AddAvatar({0})", position);
                 return PhysicsActor.Null;
@@ -231,21 +236,21 @@ namespace OpenSim.Region.Physics.Manager
             }
 
 /*
-            public override PhysicsActor AddPrim(PhysicsVector position, PhysicsVector size, Quaternion rotation)
+            public override PhysicsActor AddPrim(Vector3 position, Vector3 size, Quaternion rotation)
             {
                 m_log.InfoFormat("NullPhysicsScene : AddPrim({0},{1})", position, size);
                 return PhysicsActor.Null;
             }
 */
 
-            public override PhysicsActor AddPrimShape(string primName, PrimitiveBaseShape pbs, PhysicsVector position,
-                                                      PhysicsVector size, Quaternion rotation) //To be removed
+            public override PhysicsActor AddPrimShape(string primName, PrimitiveBaseShape pbs, Vector3 position,
+                                                      Vector3 size, Quaternion rotation) //To be removed
             {
                 return AddPrimShape(primName, pbs, position, size, rotation, false);
             }
 
-            public override PhysicsActor AddPrimShape(string primName, PrimitiveBaseShape pbs, PhysicsVector position,
-                                                      PhysicsVector size, Quaternion rotation, bool isPhysical)
+            public override PhysicsActor AddPrimShape(string primName, PrimitiveBaseShape pbs, Vector3 position,
+                                                      Vector3 size, Quaternion rotation, bool isPhysical)
             {
                 m_log.InfoFormat("[PHYSICS]: NullPhysicsScene : AddPrim({0},{1})", position, size);
                 return PhysicsActor.Null;

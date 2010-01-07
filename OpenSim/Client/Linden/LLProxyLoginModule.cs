@@ -50,7 +50,15 @@ namespace OpenSim.Client.Linden
     /// </summary>
     public class LLProxyLoginModule : ISharedRegionModule
     {
+        private uint m_port = 0;
+
         private static readonly ILog m_log = LogManager.GetLogger(MethodBase.GetCurrentMethod().DeclaringType);
+
+        public LLProxyLoginModule(uint port)
+        {
+            m_log.DebugFormat("[CLIENT]: LLProxyLoginModule port {0}", port);
+            m_port = port;
+        }
 
         protected bool RegionLoginsEnabled
         {
@@ -148,8 +156,8 @@ namespace OpenSim.Client.Linden
         protected void AddHttpHandlers()
         {
             //we will add our handlers to the first scene we received, as all scenes share a http server. But will this ever change?
-            MainServer.Instance.AddXmlRPCHandler("expect_user", ExpectUser, false);
-            MainServer.Instance.AddXmlRPCHandler("logoff_user", LogOffUser, false);
+            MainServer.GetHttpServer(m_port).AddXmlRPCHandler("expect_user", ExpectUser, false);
+            MainServer.GetHttpServer(m_port).AddXmlRPCHandler("logoff_user", LogOffUser, false);
         }
 
         protected void AddScene(Scene scene)
@@ -260,7 +268,7 @@ namespace OpenSim.Client.Linden
                         else
                         {
                             string reason;
-                            if (scene.NewUserConnection(agentData, out reason))
+                            if (scene.NewUserConnection(agentData, (uint)TeleportFlags.ViaLogin, out reason))
                             {
                                 success = true;
                             }
@@ -296,7 +304,7 @@ namespace OpenSim.Client.Linden
             }
             catch (Exception e)
             {
-                m_log.WarnFormat("[CLIENT]: Unable to receive user. Reason: {0}", e);
+                m_log.WarnFormat("[CLIENT]: Unable to receive user. Reason: {0} ({1})", e, e.StackTrace);
                 Hashtable respdata = new Hashtable();
                 respdata["success"] = "FALSE";
                 respdata["reason"] = "Exception occurred";

@@ -315,8 +315,21 @@ namespace OpenSim.ApplicationPlugins.RemoteController
 
                 ITerrainModule terrainModule = region.RequestModuleInterface<ITerrainModule>();
                 if (null == terrainModule) throw new Exception("terrain module not available");
-                terrainModule.LoadFromFile(file);
-
+                if (Uri.IsWellFormedUriString(file, UriKind.Absolute))
+                {
+                    m_log.Info("[RADMIN]: Terrain path is URL");
+                    Uri result;
+                    if (Uri.TryCreate(file, UriKind.RelativeOrAbsolute, out result))
+                    {
+                        // the url is valid
+                        string fileType = file.Substring(file.LastIndexOf('/') + 1);
+                        terrainModule.LoadFromStream(fileType, result);
+                    }
+                }
+                else
+                {
+                    terrainModule.LoadFromFile(file);
+                }
                 responseData["success"] = false;
 
                 response.Value = responseData;
@@ -360,7 +373,7 @@ namespace OpenSim.ApplicationPlugins.RemoteController
                     && ((string) requestData["shutdown"] == "delayed")
                     && requestData.ContainsKey("milliseconds"))
                 {
-                    timeout = (Int32) requestData["milliseconds"];
+                    timeout = Int32.Parse(requestData["milliseconds"].ToString());
 
                     message
                         = "Region is going down in " + ((int) (timeout/1000)).ToString()
@@ -1562,11 +1575,8 @@ namespace OpenSim.ApplicationPlugins.RemoteController
                     assets = doc.GetElementsByTagName("RequiredAsset");
                     foreach (XmlNode asset in assets)
                     {
-                        AssetBase rass   = new AssetBase();
-                        rass.FullID      = UUID.Random();
-                        rass.Name        = GetStringAttribute(asset,"name","");
+                        AssetBase rass   = new AssetBase(UUID.Random(), GetStringAttribute(asset,"name",""), SByte.Parse(GetStringAttribute(asset,"type","")));
                         rass.Description = GetStringAttribute(asset,"desc","");
-                        rass.Type        = SByte.Parse(GetStringAttribute(asset,"type",""));
                         rass.Local       = Boolean.Parse(GetStringAttribute(asset,"local",""));
                         rass.Temporary   = Boolean.Parse(GetStringAttribute(asset,"temporary",""));
                         rass.Data        = Convert.FromBase64String(asset.InnerText);
