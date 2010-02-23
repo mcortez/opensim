@@ -194,6 +194,8 @@ namespace OpenSim.Region.Examples.SimpleModule
         public event ObjectBuy OnObjectBuy;
         public event BuyObjectInventory OnBuyObjectInventory;
         public event AgentSit OnUndo;
+        public event AgentSit OnRedo;
+        public event LandUndo OnLandUndo;
 
         public event ForceReleaseControls OnForceReleaseControls;
 
@@ -879,7 +881,7 @@ namespace OpenSim.Region.Examples.SimpleModule
         {
         }
 
-        public void SendEstateManagersList(UUID invoice, UUID[] EstateManagers, uint estateID)
+        public void SendEstateList(UUID invoice, int code, UUID[] Data, uint estateID)
         {
         }
 
@@ -1133,6 +1135,14 @@ namespace OpenSim.Region.Examples.SimpleModule
         }
         
         public void SendGroupTransactionsSummaryDetails(IClientAPI sender,UUID groupID, UUID transactionID, UUID sessionID,int amt)
+        {
+        }
+
+        public void SendGroupVoteHistory(UUID groupID, UUID transactionID, GroupVoteHistory[] Votes)
+        {
+        }
+
+        public void SendGroupActiveProposals(UUID groupID, UUID transactionID, GroupActiveProposals[] Proposals)
         {
         }
     }

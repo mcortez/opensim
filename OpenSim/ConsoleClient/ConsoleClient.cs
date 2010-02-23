@@ -82,7 +82,15 @@ namespace OpenSim.ConsoleClient
 
         private static void SendCommand(string module, string[] cmd)
         {
-            string sendCmd = String.Join(" ", cmd);
+            string sendCmd = "";
+            if (cmd.Length > 1)
+            {
+                sendCmd = cmd[0];
+
+                Array.Copy(cmd, 1, cmd, 0, cmd.Length-1);
+                Array.Resize(ref cmd, cmd.Length-1);
+                sendCmd += "\"" + String.Join("\" \"", cmd) + "\"";
+            }
 
             Requester.MakeRequest("http://"+m_Host+":"+m_Port.ToString()+"/SessionCommand/", String.Format("ID={0}&COMMAND={1}", m_SessionID, sendCmd), CommandReply);
         }

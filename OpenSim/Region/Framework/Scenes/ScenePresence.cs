@@ -104,6 +104,16 @@ namespace OpenSim.Region.Framework.Scenes
         }
         protected ScenePresenceAnimator m_animator;
 
+        /// <value>
+        /// The scene objects attached to this avatar.  Do not change this list directly - use methods such as
+        /// AddAttachment() and RemoveAttachment().  Lock this list when performing any read operations upon it.
+        /// </value>
+        public List<SceneObjectGroup> Attachments
+        {
+            get { return m_attachments; }
+        }
+        protected List<SceneObjectGroup> m_attachments = new List<SceneObjectGroup>();
+
         private Dictionary<UUID, ScriptControllers> scriptedcontrols = new Dictionary<UUID, ScriptControllers>();
         private ScriptControlled IgnoredControls = ScriptControlled.CONTROL_ZERO;
         private ScriptControlled LastCommands = ScriptControlled.CONTROL_ZERO;
@@ -153,6 +163,8 @@ namespace OpenSim.Region.Framework.Scenes
         private float m_speedModifier = 1.0f;
 
         private Quaternion m_bodyRot= Quaternion.Identity;
+
+        private Quaternion m_bodyRotPrevious = Quaternion.Identity;
 
         private const int LAND_VELOCITYMAG_MAX = 12;
 
@@ -216,8 +228,6 @@ namespace OpenSim.Region.Framework.Scenes
         protected float m_DrawDistance;
 
         protected AvatarAppearance m_appearance;
-
-        protected List<SceneObjectGroup> m_attachments = new List<SceneObjectGroup>();
 
         // neighbouring regions we have enabled a child agent in
         // holds the seed cap for the child agent in that region
@@ -500,6 +510,12 @@ namespace OpenSim.Region.Framework.Scenes
             set { m_bodyRot = value; }
         }
 
+        public Quaternion PreviousRotation
+        {
+            get { return m_bodyRotPrevious; }
+            set { m_bodyRotPrevious = value; }
+        }
+
         /// <summary>
         /// If this is true, agent doesn't have a representation in this scene.
         ///    this is an agent 'looking into' this scene from a nearby scene(region)
@@ -630,12 +646,16 @@ namespace OpenSim.Region.Framework.Scenes
         #endregion
 
         #region Constructor(s)
-
-        private ScenePresence(IClientAPI client, Scene world, RegionInfo reginfo)
+        
+        public ScenePresence()
         {
-            m_animator = new ScenePresenceAnimator(this);
             m_sendCourseLocationsMethod = SendCoarseLocationsDefault;
             CreateSceneViewer();
+            m_animator = new ScenePresenceAnimator(this);
+        }
+        
+        private ScenePresence(IClientAPI client, Scene world, RegionInfo reginfo) : this()
+        {
             m_rootRegionHandle = reginfo.RegionHandle;
             m_controllingClient = client;
             m_firstname = m_controllingClient.FirstName;
@@ -658,7 +678,6 @@ namespace OpenSim.Region.Framework.Scenes
             m_reprioritization_timer = new Timer(world.ReprioritizationInterval);
             m_reprioritization_timer.Elapsed += new ElapsedEventHandler(Reprioritize);
             m_reprioritization_timer.AutoReset = false;
-
 
             AdjustKnownSeeds();
 
@@ -813,6 +832,31 @@ namespace OpenSim.Region.Framework.Scenes
             if (pos.X < 0 || pos.Y < 0 || pos.Z < 0)
             {
                 Vector3 emergencyPos = new Vector3(((int)Constants.RegionSize * 0.5f), ((int)Constants.RegionSize * 0.5f), 128);
+                
+                if (pos.X < 0)
+                {
+                    emergencyPos.X = (int)Constants.RegionSize + pos.X;
+                    if (!(pos.Y < 0))
+                        emergencyPos.Y = pos.Y;
+                    if (!(pos.Z < 0))
+                        emergencyPos.X = pos.X;
+                }
+                if (pos.Y < 0)
+                {
+                    emergencyPos.Y = (int)Constants.RegionSize + pos.Y;
+                    if (!(pos.X < 0))
+                        emergencyPos.X = pos.X;
+                    if (!(pos.Z < 0))
+                        emergencyPos.Z = pos.Z;
+                }
+                if (pos.Z < 0)
+                {
+                    if (!(pos.X < 0))
+                        emergencyPos.X = pos.X;
+                    if (!(pos.Y < 0))
+                        emergencyPos.Y = pos.Y;
+                    //Leave as 128
+                }
 
                 m_log.WarnFormat(
                     "[SCENE PRESENCE]: MakeRootAgent() was given an illegal position of {0} for avatar {1}, {2}.  Substituting {3}",
@@ -1102,7 +1146,6 @@ namespace OpenSim.Region.Framework.Scenes
 
             m_controllingClient.MoveAgentIntoRegion(m_regionInfo, AbsolutePosition, look);
             SendInitialData();
-
         }
 
         /// <summary>
@@ -1276,6 +1319,12 @@ namespace OpenSim.Region.Framework.Scenes
 
             if (m_allowMovement)
             {
+                if (agentData.UseClientAgentPosition)
+                {
+                    m_moveToPositionInProgress = (agentData.ClientAgentPosition - AbsolutePosition).Length() > 0.2f;
+                    m_moveToPositionTarget = agentData.ClientAgentPosition;
+                }
+
                 int i = 0;
                 
                 bool update_rotation = false;
@@ -1382,7 +1431,7 @@ namespace OpenSim.Region.Framework.Scenes
                     if (bAllowUpdateMoveToPosition && (m_moveToPositionInProgress && !m_autopilotMoving))
                     {
                         //Check the error term of the current position in relation to the target position
-                        if (Util.GetDistanceTo(AbsolutePosition, m_moveToPositionTarget) <= 1.5f)
+                        if (Util.GetDistanceTo(AbsolutePosition, m_moveToPositionTarget) <= 0.5f)
                         {
                             // we are close enough to the target
                             m_moveToPositionTarget = Vector3.Zero;
@@ -2489,6 +2538,8 @@ namespace OpenSim.Region.Framework.Scenes
         /// </summary>
         public void SendWearables()
         {
+            m_log.DebugFormat("[SCENE]: Received request for wearables of {0}", Name);
+            
             ControllingClient.SendWearables(m_appearance.Wearables, m_appearance.Serial++);
         }
 
@@ -2686,36 +2737,75 @@ namespace OpenSim.Region.Framework.Scenes
             {
                 // Checks if where it's headed exists a region
 
+                bool needsTransit = false;
                 if (m_scene.TestBorderCross(pos2, Cardinals.W))
                 {
                     if (m_scene.TestBorderCross(pos2, Cardinals.S))
+                    {
+                        needsTransit = true;
                         neighbor = HaveNeighbor(Cardinals.SW, ref fix);
+                    }
                     else if (m_scene.TestBorderCross(pos2, Cardinals.N))
+                    {
+                        needsTransit = true;
                         neighbor = HaveNeighbor(Cardinals.NW, ref fix);
+                    }
                     else
+                    {
+                        needsTransit = true;
                         neighbor = HaveNeighbor(Cardinals.W, ref fix);
+                    }
                 }
                 else if (m_scene.TestBorderCross(pos2, Cardinals.E))
                 {
                     if (m_scene.TestBorderCross(pos2, Cardinals.S))
+                    {
+                        needsTransit = true;
                         neighbor = HaveNeighbor(Cardinals.SE, ref fix);
+                    }
                     else if (m_scene.TestBorderCross(pos2, Cardinals.N))
+                    {
+                        needsTransit = true;
                         neighbor = HaveNeighbor(Cardinals.NE, ref fix);
+                    }
                     else
+                    {
+                        needsTransit = true;
                         neighbor = HaveNeighbor(Cardinals.E, ref fix);
+                    }
                 }
                 else if (m_scene.TestBorderCross(pos2, Cardinals.S))
+                {
+                    needsTransit = true;
                     neighbor = HaveNeighbor(Cardinals.S, ref fix);
+                }
                 else if (m_scene.TestBorderCross(pos2, Cardinals.N))
+                {
+                    needsTransit = true;
                     neighbor = HaveNeighbor(Cardinals.N, ref fix);
+                }
 
-                
+
                 // Makes sure avatar does not end up outside region
-                if (neighbor < 0)
-                    AbsolutePosition = new Vector3(
-                                                   AbsolutePosition.X +  3*fix[0],
-                                                   AbsolutePosition.Y +  3*fix[1],
-                                                   AbsolutePosition.Z);
+                if (neighbor <= 0)
+                {
+                    if (!needsTransit)
+                    {
+                        if (m_requestedSitTargetUUID == UUID.Zero)
+                        {
+                            Vector3 pos = AbsolutePosition;
+                            if (AbsolutePosition.X < 0)
+                                pos.X += Velocity.X;
+                            else if (AbsolutePosition.X > Constants.RegionSize)
+                                pos.X -= Velocity.X;
+                            if (AbsolutePosition.Y < 0)
+                                pos.Y += Velocity.Y;
+                            else if (AbsolutePosition.Y > Constants.RegionSize)
+                                pos.Y -= Velocity.Y;
+                            AbsolutePosition = pos;
+                        }
+                    }
+                }
                 else if (neighbor > 0)
                     CrossToNewRegion();
             }
@@ -2773,7 +2863,14 @@ namespace OpenSim.Region.Framework.Scenes
         protected void CrossToNewRegion()
         {
             InTransit();
-            m_scene.CrossAgentToNewRegion(this, m_physicsActor.Flying);
+            try
+            {
+                m_scene.CrossAgentToNewRegion(this, m_physicsActor.Flying);
+            }
+            catch
+            {
+                m_scene.CrossAgentToNewRegion(this, false);
+            }
         }
 
         public void InTransit()
@@ -2851,7 +2948,6 @@ namespace OpenSim.Region.Framework.Scenes
             {
                 RemoveNeighbourRegion(handle);
             }
-
         }
 
         #endregion
@@ -3012,7 +3108,7 @@ namespace OpenSim.Region.Framework.Scenes
             List<int> attPoints = m_appearance.GetAttachedPoints();
             if (attPoints != null)
             {
-                m_log.DebugFormat("[SCENE PRESENCE]: attachments {0}", attPoints.Count);
+                //m_log.DebugFormat("[SCENE PRESENCE]: attachments {0}", attPoints.Count);
                 int i = 0;
                 AttachmentData[] attachs = new AttachmentData[attPoints.Count];
                 foreach (int point in attPoints)
@@ -3170,7 +3266,6 @@ namespace OpenSim.Region.Framework.Scenes
             m_physicsActor.OnOutOfBounds += OutOfBoundsCall; // Called for PhysicsActors when there's something wrong
             m_physicsActor.SubscribeEvents(500);
             m_physicsActor.LocalID = LocalId;
-            
         }
 
         private void OutOfBoundsCall(Vector3 pos)
@@ -3180,7 +3275,7 @@ namespace OpenSim.Region.Framework.Scenes
 
             //AddToPhysicalScene(flying);
             if (ControllingClient != null)
-                ControllingClient.SendAgentAlertMessage("Physics is having a problem with your avatar.  You may not be able to move until you relog.",true);
+                ControllingClient.SendAgentAlertMessage("Physics is having a problem with your avatar.  You may not be able to move until you relog.", true);
         }
 
         // Event called by the physics plugin to tell the avatar about a collision.
@@ -3236,17 +3331,15 @@ namespace OpenSim.Region.Framework.Scenes
             uint killerObj = 0;
             foreach (uint localid in coldata.Keys)
             {
-                if (coldata[localid].PenetrationDepth <= 0.10f || m_invulnerable)
-                    continue;
-                //if (localid == 0)
-                    //continue;
-
-                SceneObjectPart part = m_scene.GetSceneObjectPart(localid);
+                SceneObjectPart part = Scene.GetSceneObjectPart(localid);
 
                 if (part != null && part.ParentGroup.Damage != -1.0f)
                     Health -= part.ParentGroup.Damage;
                 else
-                    Health -= coldata[localid].PenetrationDepth * 5.0f;
+                {
+                    if (coldata[localid].PenetrationDepth >= 0.10f)
+                        Health -= coldata[localid].PenetrationDepth * 5.0f;
+                }
 
                 if (Health <= 0.0f)
                 {
@@ -3265,8 +3358,6 @@ namespace OpenSim.Region.Framework.Scenes
                 if (m_health <= 0)
                     m_scene.EventManager.TriggerAvatarKill(killerObj, this);
             }
-
-            
         }
 
         public void setHealthWithUpdate(float health)
@@ -3311,13 +3402,6 @@ namespace OpenSim.Region.Framework.Scenes
             RemoveFromPhysicalScene();
             m_animator.Close();
             m_animator = null;
-        }
-
-        public ScenePresence()
-        {
-            m_sendCourseLocationsMethod = SendCoarseLocationsDefault;
-            CreateSceneViewer();
-            m_animator = new ScenePresenceAnimator(this);
         }
 
         public void AddAttachment(SceneObjectGroup gobj)

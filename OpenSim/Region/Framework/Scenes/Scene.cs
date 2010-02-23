@@ -144,7 +144,7 @@ namespace OpenSim.Region.Framework.Scenes
         public CommunicationsManager CommsManager;
 
         protected SceneCommunicationService m_sceneGridService;
-        public bool loginsdisabled = true;
+        public bool LoginsDisabled = true;
 
         public new float TimeDilation
         {
@@ -1009,7 +1009,7 @@ namespace OpenSim.Region.Framework.Scenes
                     {
                         if (ent is SceneObjectGroup)
                         {
-                            ((SceneObjectGroup) ent).RemoveScriptInstances();
+                            ((SceneObjectGroup) ent).RemoveScriptInstances(false);
                         }
                     }
                 }
@@ -1275,15 +1275,19 @@ namespace OpenSim.Region.Framework.Scenes
                         StatsReporter.addScriptLines(m_sceneGraph.GetScriptLPS());
                     }
 
-                    if (loginsdisabled && m_frame > 20)
+                    if (LoginsDisabled && m_frame == 20)
                     {
                         // In 99.9% of cases it is a bad idea to manually force garbage collection. However,
                         // this is a rare case where we know we have just went through a long cycle of heap
                         // allocations, and there is no more work to be done until someone logs in
                         GC.Collect();
 
-                        m_log.DebugFormat("[REGION]: Enabling logins for {0}", RegionInfo.RegionName);
-                        loginsdisabled = false;
+                        IConfig startupConfig = m_config.Configs["Startup"];
+                        if (startupConfig == null || !startupConfig.GetBoolean("StartDisabled", false))
+                        {
+                            m_log.DebugFormat("[REGION]: Enabling logins for {0}", RegionInfo.RegionName);
+                            LoginsDisabled = false;
+                        }
                     }
                 }
                 catch (NotImplementedException)
@@ -1558,9 +1562,9 @@ namespace OpenSim.Region.Framework.Scenes
             //m_sceneGridService.RegisterRegion(m_interregionCommsOut, RegionInfo);
 
             GridRegion region = new GridRegion(RegionInfo);
-            bool success = GridService.RegisterRegion(RegionInfo.ScopeID, region);
-            if (!success)
-                throw new Exception("Can't register with grid");
+            string error = GridService.RegisterRegion(RegionInfo.ScopeID, region);
+            if (error != String.Empty)
+                throw new Exception(error);
 
             m_sceneGridService.SetScene(this);
             m_sceneGridService.InformNeighborsThatRegionisUp(RequestModuleInterface<INeighbourService>(), RegionInfo);
@@ -1880,13 +1884,15 @@ namespace OpenSim.Region.Framework.Scenes
         /// <param name="silent">Suppress broadcasting changes to other clients.</param>
         public void DeleteSceneObject(SceneObjectGroup group, bool silent)
         {
+//            m_log.DebugFormat("[SCENE]: Deleting scene object {0} {1}", group.Name, group.UUID);
+            
             //SceneObjectPart rootPart = group.GetChildPart(group.UUID);
 
             // Serialise calls to RemoveScriptInstances to avoid
             // deadlocking on m_parts inside SceneObjectGroup
             lock (m_deleting_scene_object)
             {
-                group.RemoveScriptInstances();
+                group.RemoveScriptInstances(true);
             }
 
             foreach (SceneObjectPart part in group.Children.Values)
@@ -1914,6 +1920,8 @@ namespace OpenSim.Region.Framework.Scenes
             }
 
             group.DeleteGroup(silent);
+
+//            m_log.DebugFormat("[SCENE]: Exit DeleteSceneObject() for {0} {1}", group.Name, group.UUID);
         }
 
         /// <summary>
@@ -1964,6 +1972,23 @@ namespace OpenSim.Region.Framework.Scenes
                 catch (Exception)
                 {
                     m_log.Warn("[DATABASE]: exception when trying to remove the prim that crossed the border.");
+                }
+                return;
+            }
+
+            if (grp.RootPart.RETURN_AT_EDGE)
+            {
+                // We remove the object here
+                try
+                {
+                    List<SceneObjectGroup> objects = new List<SceneObjectGroup>();
+                    objects.Add(grp);
+                    SceneObjectGroup[] objectsArray = objects.ToArray();
+                    returnObjects(objectsArray, UUID.Zero);
+                }
+                catch (Exception)
+                {
+                    m_log.Warn("[DATABASE]: exception when trying to return the prim that crossed the border.");
                 }
                 return;
             }
@@ -2036,19 +2061,25 @@ namespace OpenSim.Region.Framework.Scenes
                     Border crossedBordery = GetCrossedBorder(attemptedPosition + SouthCross, Cardinals.S);
                     //(crossedBorderx.BorderLine.Z / (int)Constants.RegionSize)
 
-                    if (crossedBordery.BorderLine.Z > 0)
+                    try
                     {
-                        pos.Y = ((pos.Y + crossedBordery.BorderLine.Z));
-                        changeY = (int)(crossedBordery.BorderLine.Z / (int)Constants.RegionSize);
-                    }
-                    else
-                        pos.Y = ((pos.Y + Constants.RegionSize));
+                        if (crossedBordery.BorderLine.Z > 0)
+                        {
+                            pos.Y = ((pos.Y + crossedBordery.BorderLine.Z));
+                            changeY = (int)(crossedBordery.BorderLine.Z / (int)Constants.RegionSize);
+                        }
+                        else
+                            pos.Y = ((pos.Y + Constants.RegionSize));
 
-                    newRegionHandle
-                        = Util.UIntsToLong((uint)((thisx - changeX) * Constants.RegionSize),
-                                           (uint)((thisy + changeY) * Constants.RegionSize));
-                    // x - 1
-                    // y + 1
+                        newRegionHandle
+                            = Util.UIntsToLong((uint)((thisx - changeX) * Constants.RegionSize),
+                                               (uint)((thisy + changeY) * Constants.RegionSize));
+                        // x - 1
+                        // y + 1
+                    }
+                    catch (Exception ex)
+                    {
+                    }
                 }
                 else
                 {
@@ -2398,9 +2429,14 @@ namespace OpenSim.Region.Framework.Scenes
             return successYN;
         }
 
+        /// <summary>
+        /// Called when objects or attachments cross the border between regions.
+        /// </summary>
+        /// <param name="sog"></param>
+        /// <returns></returns>
         public bool IncomingCreateObject(ISceneObject sog)
         {
-            //m_log.Debug(" >>> IncomingCreateObject <<< " + ((SceneObjectGroup)sog).AbsolutePosition + " deleted? " + ((SceneObjectGroup)sog).IsDeleted);
+            //m_log.Debug(" >>> IncomingCreateObject(sog) <<< " + ((SceneObjectGroup)sog).AbsolutePosition + " deleted? " + ((SceneObjectGroup)sog).IsDeleted);
             SceneObjectGroup newObject;
             try
             {
@@ -2417,7 +2453,12 @@ namespace OpenSim.Region.Framework.Scenes
                 m_log.DebugFormat("[SCENE]: Problem adding scene object {0} in {1} ", sog.UUID, RegionInfo.RegionName);
                 return false;
             }
+            
             newObject.RootPart.ParentGroup.CreateScriptInstances(0, false, DefaultScriptEngine, 1);
+
+            // Do this as late as possible so that listeners have full access to the incoming object
+            EventManager.TriggerOnIncomingSceneObject(newObject);
+            
             return true;
         }
 
@@ -2429,6 +2470,8 @@ namespace OpenSim.Region.Framework.Scenes
         /// <returns>False</returns>
         public virtual bool IncomingCreateObject(UUID userID, UUID itemID)
         {
+            //m_log.DebugFormat(" >>> IncomingCreateObject(userID, itemID) <<< {0} {1}", userID, itemID);
+            
             ScenePresence sp = GetScenePresence(userID);
             if (sp != null)
             {
@@ -2463,7 +2506,7 @@ namespace OpenSim.Region.Framework.Scenes
             foreach (SceneObjectPart p in sceneObject.Children.Values)
                 p.LocalId = 0;
 
-            if ((sceneObject.RootPart.Shape.PCode == (byte)PCode.Prim) && (sceneObject.RootPart.Shape.State != 0)) // Attachment
+            if (sceneObject.IsAttachmentCheckFull()) // Attachment
             {
                 sceneObject.RootPart.AddFlag(PrimFlags.TemporaryOnRez);
                 sceneObject.RootPart.AddFlag(PrimFlags.Phantom);
@@ -2488,20 +2531,15 @@ namespace OpenSim.Region.Framework.Scenes
 
                     //RootPrim.SetParentLocalId(parentLocalID);
 
-                    m_log.DebugFormat("[ATTACHMENT]: Received " +
-                                "attachment {0}, inworld asset id {1}",
-                                //grp.RootPart.LastOwnerID.ToString(),
-                                grp.GetFromItemID(),
-                                grp.UUID.ToString());
+                    m_log.DebugFormat(
+                        "[ATTACHMENT]: Received attachment {0}, inworld asset id {1}", grp.GetFromItemID(), grp.UUID);
 
                     //grp.SetFromAssetID(grp.RootPart.LastOwnerID);
-                    m_log.DebugFormat("[ATTACHMENT]: Attach " +
-                            "to avatar {0} at position {1}",
-                            sp.UUID.ToString(), grp.AbsolutePosition);
-                    AttachObject(sp.ControllingClient,
-                            grp.LocalId, (uint)0,
-                            grp.GroupRotation,
-                            grp.AbsolutePosition, false);
+                    m_log.DebugFormat(
+                        "[ATTACHMENT]: Attach to avatar {0} at position {1}", sp.UUID, grp.AbsolutePosition);
+                    
+                    AttachObject(
+                        sp.ControllingClient, grp.LocalId, (uint)0, grp.GroupRotation, grp.AbsolutePosition, false);
                     RootPrim.RemFlag(PrimFlags.TemporaryOnRez);
                     grp.SendGroupFullUpdate();
                 }
@@ -2510,7 +2548,6 @@ namespace OpenSim.Region.Framework.Scenes
                     RootPrim.RemFlag(PrimFlags.TemporaryOnRez);
                     RootPrim.AddFlag(PrimFlags.TemporaryOnRez);
                 }
-
             }
             else
             {
@@ -2667,8 +2704,10 @@ namespace OpenSim.Region.Framework.Scenes
             client.OnRequestObjectPropertiesFamily += m_sceneGraph.RequestObjectPropertiesFamily;
             client.OnObjectPermissions += HandleObjectPermissionsUpdate;
             client.OnGrabObject += ProcessObjectGrab;
+            client.OnGrabUpdate += ProcessObjectGrabUpdate; 
             client.OnDeGrabObject += ProcessObjectDeGrab;
             client.OnUndo += m_sceneGraph.HandleUndo;
+            client.OnRedo += m_sceneGraph.HandleRedo;
             client.OnObjectDescription += m_sceneGraph.PrimDescription;
             client.OnObjectDrop += m_sceneGraph.DropObject;
             client.OnObjectSaleInfo += ObjectSaleInfo;
@@ -2823,6 +2862,7 @@ namespace OpenSim.Region.Framework.Scenes
             client.OnGrabObject -= ProcessObjectGrab;
             client.OnDeGrabObject -= ProcessObjectDeGrab;
             client.OnUndo -= m_sceneGraph.HandleUndo;
+            client.OnRedo -= m_sceneGraph.HandleRedo;
             client.OnObjectDescription -= m_sceneGraph.PrimDescription;
             client.OnObjectDrop -= m_sceneGraph.DropObject;
             client.OnObjectSaleInfo -= ObjectSaleInfo;
@@ -3105,7 +3145,6 @@ namespace OpenSim.Region.Framework.Scenes
                 m_log.DebugFormat("[APPEARANCE]: Appearance not found in {0}, returning default", RegionInfo.RegionName);
                 appearance = new AvatarAppearance(client.AgentId);
             }
-
         }
 
         /// <summary>
@@ -3348,7 +3387,7 @@ namespace OpenSim.Region.Framework.Scenes
             // TeleportFlags.ViaLandmark | TeleportFlags.ViaLocation | TeleportFlags.ViaLandmark | TeleportFlags.Default - Regular Teleport
 
 
-            if (loginsdisabled)
+            if (LoginsDisabled)
             {
                 reason = "Logins Disabled";
                 return false;
@@ -3525,8 +3564,35 @@ namespace OpenSim.Region.Framework.Scenes
                 return false;
             }
 
+            IGroupsModule groupsModule =
+                    RequestModuleInterface<IGroupsModule>();
+
+            List<UUID> agentGroups = new List<UUID>();
+
+            if (groupsModule != null)
+            {
+                GroupMembershipData[] GroupMembership =
+                        groupsModule.GetMembershipData(agent.AgentID);
+
+                for (int i = 0; i < GroupMembership.Length; i++)
+                    agentGroups.Add(GroupMembership[i].GroupID);
+            }
+
+            bool groupAccess = false;
+            UUID[] estateGroups = m_regInfo.EstateSettings.EstateGroups;
+
+            foreach (UUID group in estateGroups)
+            {
+                if (agentGroups.Contains(group))
+                {
+                    groupAccess = true;
+                    break;
+                }
+            }
+
             if (!m_regInfo.EstateSettings.PublicAccess &&
-                !m_regInfo.EstateSettings.HasAccess(agent.AgentID))
+                !m_regInfo.EstateSettings.HasAccess(agent.AgentID) &&
+                !groupAccess)
             {
                 m_log.WarnFormat("[CONNECTION BEGIN]: Denied access to: {0} ({1} {2}) at {3} because the user does not have access to the estate",
                                  agent.AgentID, agent.firstname, agent.lastname, RegionInfo.RegionName);

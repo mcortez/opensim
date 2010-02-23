@@ -90,11 +90,37 @@ namespace OpenSim.Region.Framework.Scenes
         SCALE = 0x40
     }
 
+    public enum PrimType : int
+    {
+        BOX = 0,
+        CYLINDER = 1,
+        PRISM = 2,
+        SPHERE = 3,
+        TORUS = 4,
+        TUBE = 5,
+        RING = 6,
+        SCULPT = 7
+    }
+
     #endregion Enumerations
 
     public class SceneObjectPart : IScriptHost
     {
+        /// <value>
+        /// Denote all sides of the prim
+        /// </value>
+        public const int ALL_SIDES = -1;
+        
         private static readonly ILog m_log = LogManager.GetLogger(MethodBase.GetCurrentMethod().DeclaringType);
+
+        /// <value>
+        /// Is this sop a root part?
+        /// </value>
+        [XmlIgnore]
+        public bool IsRoot 
+        {
+           get { return ParentGroup.RootPart == this; } 
+        }
 
         // use only one serializer to give the runtime a chance to optimize it (it won't do that if you
         // use a new instance every time)
@@ -106,6 +132,18 @@ namespace OpenSim.Region.Framework.Scenes
 
         [XmlIgnore]
         public bool DIE_AT_EDGE;
+
+        [XmlIgnore]
+        public bool RETURN_AT_EDGE;
+
+        [XmlIgnore]
+        public bool BlockGrab;
+
+        [XmlIgnore]
+        public bool StatusSandbox;
+
+        [XmlIgnore]
+        public Vector3 StatusSandboxPos;
 
         // TODO: This needs to be persisted in next XML version update!
         [XmlIgnore]
@@ -193,6 +231,15 @@ namespace OpenSim.Region.Framework.Scenes
         [XmlIgnore]
         public Quaternion SpinOldOrientation = Quaternion.Identity;
 
+        [XmlIgnore]
+        public Quaternion m_APIDTarget = Quaternion.Identity;
+
+        [XmlIgnore]
+        public float m_APIDDamp = 0;
+
+        [XmlIgnore]
+        public float m_APIDStrength = 0;
+
         /// <summary>
         /// This part's inventory
         /// </summary>
@@ -205,6 +252,9 @@ namespace OpenSim.Region.Framework.Scenes
 
         [XmlIgnore]
         public bool Undoing;
+
+        [XmlIgnore]
+        public bool IgnoreUndoUpdate = false;
 
         [XmlIgnore]
         private PrimFlags LocalFlags;
@@ -227,6 +277,7 @@ namespace OpenSim.Region.Framework.Scenes
         private string m_text = String.Empty;
         private string m_touchName = String.Empty;
         private readonly UndoStack<UndoState> m_undo = new UndoStack<UndoState>(5);
+        private readonly UndoStack<UndoState> m_redo = new UndoStack<UndoState>(5);
         private UUID _creatorID;
 
         private bool m_passTouches;
@@ -475,6 +526,27 @@ namespace OpenSim.Region.Framework.Scenes
             }
         }
 
+        [XmlIgnore]
+        public Quaternion APIDTarget
+        {
+            get { return m_APIDTarget; }
+            set { m_APIDTarget = value; }
+        }
+
+        [XmlIgnore]
+        public float APIDDamp
+        {
+            get { return m_APIDDamp; }
+            set { m_APIDDamp = value; }
+        }
+
+        [XmlIgnore]
+        public float APIDStrength
+        {
+            get { return m_APIDStrength; }
+            set { m_APIDStrength = value; }
+        }
+
         public ulong RegionHandle
         {
             get { return m_regionHandle; }
@@ -485,6 +557,33 @@ namespace OpenSim.Region.Framework.Scenes
         {
             get { return m_scriptAccessPin; }
             set { m_scriptAccessPin = (int)value; }
+        }
+        private SceneObjectPart m_PlaySoundMasterPrim = null;
+        public SceneObjectPart PlaySoundMasterPrim
+        {
+            get { return m_PlaySoundMasterPrim; }
+            set { m_PlaySoundMasterPrim = value; }
+        }
+
+        private List<SceneObjectPart> m_PlaySoundSlavePrims = new List<SceneObjectPart>();
+        public List<SceneObjectPart> PlaySoundSlavePrims
+        {
+            get { return m_LoopSoundSlavePrims; }
+            set { m_LoopSoundSlavePrims = value; }
+        }
+
+        private SceneObjectPart m_LoopSoundMasterPrim = null;
+        public SceneObjectPart LoopSoundMasterPrim
+        {
+            get { return m_LoopSoundMasterPrim; }
+            set { m_LoopSoundMasterPrim = value; }
+        }
+
+        private List<SceneObjectPart> m_LoopSoundSlavePrims = new List<SceneObjectPart>();
+        public List<SceneObjectPart> LoopSoundSlavePrims
+        {
+            get { return m_LoopSoundSlavePrims; }
+            set { m_LoopSoundSlavePrims = value; }
         }
 
         [XmlIgnore]
@@ -547,8 +646,6 @@ namespace OpenSim.Region.Framework.Scenes
             }
             set
             {
-                StoreUndoState();
-
                 m_groupPosition = value;
 
                 PhysicsActor actor = PhysActor;
@@ -737,6 +834,9 @@ namespace OpenSim.Region.Framework.Scenes
             }
         }
 
+        /// <value>
+        /// Text color.
+        /// </value>
         public Color Color
         {
             get { return m_color; }
@@ -1372,6 +1472,10 @@ namespace OpenSim.Region.Framework.Scenes
             {
                 m_undo.Clear();
             }
+            lock (m_redo)
+            {
+                m_redo.Clear();
+            }
             StoreUndoState();
         }
 
@@ -1682,6 +1786,66 @@ namespace OpenSim.Region.Framework.Scenes
             return m_parentGroup.RootPart.DIE_AT_EDGE;
         }
 
+        public bool GetReturnAtEdge()
+        {
+            if (m_parentGroup == null)
+                return false;
+            if (m_parentGroup.IsDeleted)
+                return false;
+
+            return m_parentGroup.RootPart.RETURN_AT_EDGE;
+        }
+
+        public void SetReturnAtEdge(bool p)
+        {
+            if (m_parentGroup == null)
+                return;
+            if (m_parentGroup.IsDeleted)
+                return;
+
+            m_parentGroup.RootPart.RETURN_AT_EDGE = p;
+        }
+
+        public bool GetBlockGrab()
+        {
+            if (m_parentGroup == null)
+                return false;
+            if (m_parentGroup.IsDeleted)
+                return false;
+
+            return m_parentGroup.RootPart.BlockGrab;
+        }
+
+        public void SetBlockGrab(bool p)
+        {
+            if (m_parentGroup == null)
+                return;
+            if (m_parentGroup.IsDeleted)
+                return;
+
+            m_parentGroup.RootPart.BlockGrab = p;
+        }
+
+        public void SetStatusSandbox(bool p)
+        {
+            if (m_parentGroup == null)
+                return;
+            if (m_parentGroup.IsDeleted)
+                return;
+            StatusSandboxPos = m_parentGroup.RootPart.AbsolutePosition;
+            m_parentGroup.RootPart.StatusSandbox = p;
+        }
+
+        public bool GetStatusSandbox()
+        {
+            if (m_parentGroup == null)
+                return false;
+            if (m_parentGroup.IsDeleted)
+                return false;
+
+            return m_parentGroup.RootPart.StatusSandbox;
+        }
+
         public int GetAxisRotation(int axis)
         {
             //Cannot use ScriptBaseClass constants as no referance to it currently.
@@ -1853,16 +2017,12 @@ namespace OpenSim.Region.Framework.Scenes
             // and build up list of colliders this time
             foreach (uint localid in collissionswith.Keys)
             {
-                if (localid != 0)
+                thisHitColliders.Add(localid);
+                if (!m_lastColliders.Contains(localid))
                 {
-                    thisHitColliders.Add(localid);
-                    if (!m_lastColliders.Contains(localid))
-                    {
-                        startedColliders.Add(localid);
-                    }
-
-                    //m_log.Debug("[OBJECT]: Collided with:" + localid.ToString() + " at depth of: " + collissionswith[localid].ToString());
+                    startedColliders.Add(localid);
                 }
+                //m_log.Debug("[OBJECT]: Collided with:" + localid.ToString() + " at depth of: " + collissionswith[localid].ToString());
             }
 
             // calculate things that ended colliding
@@ -1892,7 +2052,7 @@ namespace OpenSim.Region.Framework.Scenes
             // play the sound.
             if (startedColliders.Count > 0 && CollisionSound != UUID.Zero && CollisionSoundVolume > 0.0f)
             {
-                SendSound(CollisionSound.ToString(), CollisionSoundVolume, true, (byte)0);
+                SendSound(CollisionSound.ToString(), CollisionSoundVolume, true, (byte)0, 0, false, false);
             }
 
             if ((m_parentGroup.RootPart.ScriptEvents & scriptEvents.collision_start) != 0)
@@ -1904,6 +2064,8 @@ namespace OpenSim.Region.Framework.Scenes
                     List<DetectedObject> colliding = new List<DetectedObject>();
                     foreach (uint localId in startedColliders)
                     {
+                        if (localId == 0)
+                            continue;
                         // always running this check because if the user deletes the object it would return a null reference.
                         if (m_parentGroup == null)
                             return;
@@ -1941,7 +2103,7 @@ namespace OpenSim.Region.Framework.Scenes
                             {
                                 bool found = m_parentGroup.RootPart.CollisionFilter.TryGetValue(1,out data);
                                 //If it is 1, it is to accept ONLY collisions from this object, so this other object will not work
-                                if (found)
+                                if (!found)
                                 {
                                     DetectedObject detobj = new DetectedObject();
                                     detobj.keyUUID = obj.UUID;
@@ -2077,7 +2239,7 @@ namespace OpenSim.Region.Framework.Scenes
                             {
                                 bool found = m_parentGroup.RootPart.CollisionFilter.TryGetValue(1,out data);
                                 //If it is 1, it is to accept ONLY collisions from this object, so this other object will not work
-                                if (found)
+                                if (!found)
                                 {
                                     DetectedObject detobj = new DetectedObject();
                                     detobj.keyUUID = obj.UUID;
@@ -2208,7 +2370,7 @@ namespace OpenSim.Region.Framework.Scenes
                             {
                                 bool found = m_parentGroup.RootPart.CollisionFilter.TryGetValue(1,out data);
                                 //If it is 1, it is to accept ONLY collisions from this object, so this other object will not work
-                                if (found)
+                                if (!found)
                                 {
                                     DetectedObject detobj = new DetectedObject();
                                     detobj.keyUUID = obj.UUID;
@@ -2293,6 +2455,120 @@ namespace OpenSim.Region.Framework.Scenes
                     }
                 }
             }
+            if ((m_parentGroup.RootPart.ScriptEvents & scriptEvents.land_collision_start) != 0)
+            {
+                if (startedColliders.Count > 0)
+                {
+                    ColliderArgs LandStartCollidingMessage = new ColliderArgs();
+                    List<DetectedObject> colliding = new List<DetectedObject>();
+                    foreach (uint localId in startedColliders)
+                    {
+                        if (localId == 0)
+                        {
+                            //Hope that all is left is ground!
+                            DetectedObject detobj = new DetectedObject();
+                            detobj.keyUUID = UUID.Zero;
+                            detobj.nameStr = "";
+                            detobj.ownerUUID = UUID.Zero;
+                            detobj.posVector = m_parentGroup.RootPart.AbsolutePosition;
+                            detobj.rotQuat = Quaternion.Identity;
+                            detobj.velVector = Vector3.Zero;
+                            detobj.colliderType = 0;
+                            detobj.groupUUID = UUID.Zero;
+                            colliding.Add(detobj);
+                        }
+                    }
+
+                    if (colliding.Count > 0)
+                    {
+                        LandStartCollidingMessage.Colliders = colliding;
+                        // always running this check because if the user deletes the object it would return a null reference.
+                        if (m_parentGroup == null)
+                            return;
+
+                        if (m_parentGroup.Scene == null)
+                            return;
+
+                        m_parentGroup.Scene.EventManager.TriggerScriptLandCollidingStart(LocalId, LandStartCollidingMessage);
+                    }
+                }
+            }
+            if ((m_parentGroup.RootPart.ScriptEvents & scriptEvents.land_collision) != 0)
+            {
+                if (m_lastColliders.Count > 0)
+                {
+                    ColliderArgs LandCollidingMessage = new ColliderArgs();
+                    List<DetectedObject> colliding = new List<DetectedObject>();
+                    foreach (uint localId in startedColliders)
+                    {
+                        if (localId == 0)
+                        {
+                            //Hope that all is left is ground!
+                            DetectedObject detobj = new DetectedObject();
+                            detobj.keyUUID = UUID.Zero;
+                            detobj.nameStr = "";
+                            detobj.ownerUUID = UUID.Zero;
+                            detobj.posVector = m_parentGroup.RootPart.AbsolutePosition;
+                            detobj.rotQuat = Quaternion.Identity;
+                            detobj.velVector = Vector3.Zero;
+                            detobj.colliderType = 0;
+                            detobj.groupUUID = UUID.Zero;
+                            colliding.Add(detobj);
+                        }
+                    }
+
+                    if (colliding.Count > 0)
+                    {
+                        LandCollidingMessage.Colliders = colliding;
+                        // always running this check because if the user deletes the object it would return a null reference.
+                        if (m_parentGroup == null)
+                            return;
+
+                        if (m_parentGroup.Scene == null)
+                            return;
+
+                        m_parentGroup.Scene.EventManager.TriggerScriptLandColliding(LocalId, LandCollidingMessage);
+                    }
+                }
+            }
+            if ((m_parentGroup.RootPart.ScriptEvents & scriptEvents.land_collision_end) != 0)
+            {
+                if (endedColliders.Count > 0)
+                {
+                    ColliderArgs LandEndCollidingMessage = new ColliderArgs();
+                    List<DetectedObject> colliding = new List<DetectedObject>();
+                    foreach (uint localId in startedColliders)
+                    {
+                        if (localId == 0)
+                        {
+                            //Hope that all is left is ground!
+                            DetectedObject detobj = new DetectedObject();
+                            detobj.keyUUID = UUID.Zero;
+                            detobj.nameStr = "";
+                            detobj.ownerUUID = UUID.Zero;
+                            detobj.posVector = m_parentGroup.RootPart.AbsolutePosition;
+                            detobj.rotQuat = Quaternion.Identity;
+                            detobj.velVector = Vector3.Zero;
+                            detobj.colliderType = 0;
+                            detobj.groupUUID = UUID.Zero;
+                            colliding.Add(detobj);
+                        }
+                    }
+
+                    if (colliding.Count > 0)
+                    {
+                        LandEndCollidingMessage.Colliders = colliding;
+                        // always running this check because if the user deletes the object it would return a null reference.
+                        if (m_parentGroup == null)
+                            return;
+
+                        if (m_parentGroup.Scene == null)
+                            return;
+
+                        m_parentGroup.Scene.EventManager.TriggerScriptLandCollidingEnd(LocalId, LandEndCollidingMessage);
+                    }
+                }
+            }
         }
 
         public void PhysicsOutOfBounds(Vector3 pos)
@@ -2350,9 +2626,8 @@ namespace OpenSim.Region.Framework.Scenes
             List<ScenePresence> avatarts = m_parentGroup.Scene.GetAvatars();
             foreach (ScenePresence p in avatarts)
             {
-                // TODO: some filtering by distance of avatar
-
-                p.ControllingClient.SendPreLoadSound(objectID, objectID, soundID);
+                if (!(Util.GetDistanceTo(p.AbsolutePosition, AbsolutePosition) >= 100))
+                    p.ControllingClient.SendPreLoadSound(objectID, objectID, soundID);
             }
         }
 
@@ -2367,7 +2642,7 @@ namespace OpenSim.Region.Framework.Scenes
             //m_log.Debug("prev: " + prevflag.ToString() + " curr: " + Flags.ToString());
             //ScheduleFullUpdate();
         }
-
+        
         public void RemoveScriptEvents(UUID scriptid)
         {
             lock (m_scriptEvents)
@@ -2413,7 +2688,38 @@ namespace OpenSim.Region.Framework.Scenes
         
         public void RotLookAt(Quaternion target, float strength, float damping)
         {
-            m_parentGroup.rotLookAt(target, strength, damping);
+            rotLookAt(target, strength, damping);
+        }
+
+        public void rotLookAt(Quaternion target, float strength, float damping)
+        {
+            if (IsAttachment)
+            {
+                /*
+                    ScenePresence avatar = m_scene.GetScenePresence(rootpart.AttachedAvatar);
+                    if (avatar != null)
+                    {
+                    Rotate the Av?
+                    } */
+            }
+            else
+            {
+                APIDDamp = damping;
+                APIDStrength = strength;
+                APIDTarget = target;
+            }
+        }
+
+        public void startLookAt(Quaternion rot, float damp, float strength)
+        {
+            APIDDamp = damp;
+            APIDStrength = strength;
+            APIDTarget = rot;
+        }
+
+        public void stopLookAt()
+        {
+            APIDTarget = Quaternion.Identity;
         }
 
         /// <summary>
@@ -2421,6 +2727,8 @@ namespace OpenSim.Region.Framework.Scenes
         /// </summary>
         public void ScheduleFullUpdate()
         {
+//            m_log.DebugFormat("[SCENE OBJECT PART]: Scheduling full update for {0} {1}", Name, LocalId);
+            
             if (m_parentGroup != null)
             {
                 m_parentGroup.QueueForUpdateCheck();
@@ -2671,7 +2979,7 @@ namespace OpenSim.Region.Framework.Scenes
         /// <param name="volume"></param>
         /// <param name="triggered"></param>
         /// <param name="flags"></param>
-        public void SendSound(string sound, double volume, bool triggered, byte flags)
+        public void SendSound(string sound, double volume, bool triggered, byte flags, float radius, bool useMaster, bool isMaster)
         {
             if (volume > 1)
                 volume = 1;
@@ -2707,10 +3015,51 @@ namespace OpenSim.Region.Framework.Scenes
             ISoundModule soundModule = m_parentGroup.Scene.RequestModuleInterface<ISoundModule>();
             if (soundModule != null)
             {
-                if (triggered)
-                    soundModule.TriggerSound(soundID, ownerID, objectID, parentID, volume, position, regionHandle);
+                if (useMaster)
+                {
+                    if (isMaster)
+                    {
+                        if (triggered)
+                            soundModule.TriggerSound(soundID, ownerID, objectID, parentID, volume, position, regionHandle, radius);
+                        else
+                            soundModule.PlayAttachedSound(soundID, ownerID, objectID, volume, position, flags, radius);
+                        ParentGroup.PlaySoundMasterPrim = this;
+                        ownerID = this._ownerID;
+                        objectID = this.UUID;
+                        parentID = this.GetRootPartUUID();
+                        position = this.AbsolutePosition; // region local
+                        regionHandle = this.ParentGroup.Scene.RegionInfo.RegionHandle;
+                        if (triggered)
+                            soundModule.TriggerSound(soundID, ownerID, objectID, parentID, volume, position, regionHandle, radius);
+                        else
+                            soundModule.PlayAttachedSound(soundID, ownerID, objectID, volume, position, flags, radius);
+                        foreach (SceneObjectPart prim in ParentGroup.PlaySoundSlavePrims)
+                        {
+                            ownerID = prim._ownerID;
+                            objectID = prim.UUID;
+                            parentID = prim.GetRootPartUUID();
+                            position = prim.AbsolutePosition; // region local
+                            regionHandle = prim.ParentGroup.Scene.RegionInfo.RegionHandle;
+                            if (triggered)
+                                soundModule.TriggerSound(soundID, ownerID, objectID, parentID, volume, position, regionHandle, radius);
+                            else
+                                soundModule.PlayAttachedSound(soundID, ownerID, objectID, volume, position, flags, radius);
+                        }
+                        ParentGroup.PlaySoundSlavePrims.Clear();
+                        ParentGroup.PlaySoundMasterPrim = null;
+                    }
+                    else
+                    {
+                        ParentGroup.PlaySoundSlavePrims.Add(this);
+                    }
+                }
                 else
-                    soundModule.PlayAttachedSound(soundID, ownerID, objectID, volume, position, flags);
+                {
+                    if (triggered)
+                        soundModule.TriggerSound(soundID, ownerID, objectID, parentID, volume, position, regionHandle, radius);
+                    else
+                        soundModule.PlayAttachedSound(soundID, ownerID, objectID, volume, position, flags, radius);
+                }
             }
         }
 
@@ -2841,6 +3190,186 @@ namespace OpenSim.Region.Framework.Scenes
             }
         }
 
+        /// <summary>
+        /// Set the color of prim faces
+        /// </summary>
+        /// <param name="color"></param>
+        /// <param name="face"></param>
+        public void SetFaceColor(Vector3 color, int face)
+        {
+            Primitive.TextureEntry tex = Shape.Textures;
+            Color4 texcolor;
+            if (face >= 0 && face < GetNumberOfSides())
+            {
+                texcolor = tex.CreateFace((uint)face).RGBA;
+                texcolor.R = Util.Clip((float)color.X, 0.0f, 1.0f);
+                texcolor.G = Util.Clip((float)color.Y, 0.0f, 1.0f);
+                texcolor.B = Util.Clip((float)color.Z, 0.0f, 1.0f);
+                tex.FaceTextures[face].RGBA = texcolor;
+                UpdateTexture(tex);
+                return;
+            }
+            else if (face == ALL_SIDES)
+            {
+                for (uint i = 0; i < GetNumberOfSides(); i++)
+                {
+                    if (tex.FaceTextures[i] != null)
+                    {
+                        texcolor = tex.FaceTextures[i].RGBA;
+                        texcolor.R = Util.Clip((float)color.X, 0.0f, 1.0f);
+                        texcolor.G = Util.Clip((float)color.Y, 0.0f, 1.0f);
+                        texcolor.B = Util.Clip((float)color.Z, 0.0f, 1.0f);
+                        tex.FaceTextures[i].RGBA = texcolor;
+                    }
+                    texcolor = tex.DefaultTexture.RGBA;
+                    texcolor.R = Util.Clip((float)color.X, 0.0f, 1.0f);
+                    texcolor.G = Util.Clip((float)color.Y, 0.0f, 1.0f);
+                    texcolor.B = Util.Clip((float)color.Z, 0.0f, 1.0f);
+                    tex.DefaultTexture.RGBA = texcolor;
+                }
+                UpdateTexture(tex);
+                return;
+            }
+        }
+
+        /// <summary>
+        /// Get the number of sides that this part has.
+        /// </summary>
+        /// <returns></returns>
+        public int GetNumberOfSides()
+        {
+            int ret = 0;
+            bool hasCut;
+            bool hasHollow;
+            bool hasDimple;
+            bool hasProfileCut;
+
+            PrimType primType = GetPrimType();
+            HasCutHollowDimpleProfileCut(primType, Shape, out hasCut, out hasHollow, out hasDimple, out hasProfileCut);
+
+            switch (primType)
+            {
+                case PrimType.BOX:
+                    ret = 6;
+                    if (hasCut) ret += 2;
+                    if (hasHollow) ret += 1;
+                    break;
+                case PrimType.CYLINDER:
+                    ret = 3;
+                    if (hasCut) ret += 2;
+                    if (hasHollow) ret += 1;
+                    break;
+                case PrimType.PRISM:
+                    ret = 5;
+                    if (hasCut) ret += 2;
+                    if (hasHollow) ret += 1;
+                    break;
+                case PrimType.SPHERE:
+                    ret = 1;
+                    if (hasCut) ret += 2;
+                    if (hasDimple) ret += 2;
+                    if (hasHollow) ret += 1;
+                    break;
+                case PrimType.TORUS:
+                    ret = 1;
+                    if (hasCut) ret += 2;
+                    if (hasProfileCut) ret += 2;
+                    if (hasHollow) ret += 1;
+                    break;
+                case PrimType.TUBE:
+                    ret = 4;
+                    if (hasCut) ret += 2;
+                    if (hasProfileCut) ret += 2;
+                    if (hasHollow) ret += 1;
+                    break;
+                case PrimType.RING:
+                    ret = 3;
+                    if (hasCut) ret += 2;
+                    if (hasProfileCut) ret += 2;
+                    if (hasHollow) ret += 1;
+                    break;
+                case PrimType.SCULPT:
+                    ret = 1;
+                    break;
+            }
+            return ret;
+        }
+
+        /// <summary>
+        /// Tell us what type this prim is
+        /// </summary>
+        /// <param name="primShape"></param>
+        /// <returns></returns>
+        public PrimType GetPrimType()
+        {
+            if (Shape.SculptEntry)
+                return PrimType.SCULPT;
+            if ((Shape.ProfileCurve & 0x07) == (byte)ProfileShape.Square)
+            {
+                if (Shape.PathCurve == (byte)Extrusion.Straight)
+                    return PrimType.BOX;
+                else if (Shape.PathCurve == (byte)Extrusion.Curve1)
+                    return PrimType.TUBE;
+            }
+            else if ((Shape.ProfileCurve & 0x07) == (byte)ProfileShape.Circle)
+            {
+                if (Shape.PathCurve == (byte)Extrusion.Straight)
+                    return PrimType.CYLINDER;
+                // ProfileCurve seems to combine hole shape and profile curve so we need to only compare against the lower 3 bits
+                else if (Shape.PathCurve == (byte)Extrusion.Curve1)
+                    return PrimType.TORUS;
+            }
+            else if ((Shape.ProfileCurve & 0x07) == (byte)ProfileShape.HalfCircle)
+            {
+                if (Shape.PathCurve == (byte)Extrusion.Curve1 || Shape.PathCurve == (byte)Extrusion.Curve2)
+                    return PrimType.SPHERE;
+            }
+            else if ((Shape.ProfileCurve & 0x07) == (byte)ProfileShape.EquilateralTriangle)
+            {
+                if (Shape.PathCurve == (byte)Extrusion.Straight)
+                    return PrimType.PRISM;
+                else if (Shape.PathCurve == (byte)Extrusion.Curve1)
+                    return PrimType.RING;
+            }
+            
+            return PrimType.BOX;
+        }
+        
+        /// <summary>
+        /// Tell us if this object has cut, hollow, dimple, and other factors affecting the number of faces 
+        /// </summary>
+        /// <param name="primType"></param>
+        /// <param name="shape"></param>
+        /// <param name="hasCut"></param>
+        /// <param name="hasHollow"></param>
+        /// <param name="hasDimple"></param>
+        /// <param name="hasProfileCut"></param>
+        protected static void HasCutHollowDimpleProfileCut(PrimType primType, PrimitiveBaseShape shape, out bool hasCut, out bool hasHollow,
+            out bool hasDimple, out bool hasProfileCut)
+        {
+            if (primType == PrimType.BOX
+                ||
+                primType == PrimType.CYLINDER
+                ||
+                primType == PrimType.PRISM)
+
+                hasCut = (shape.ProfileBegin > 0) || (shape.ProfileEnd > 0);
+            else
+                hasCut = (shape.PathBegin > 0) || (shape.PathEnd > 0);
+
+            hasHollow = shape.ProfileHollow > 0;
+            hasDimple = (shape.ProfileBegin > 0) || (shape.ProfileEnd > 0); // taken from llSetPrimitiveParms
+            hasProfileCut = hasDimple; // is it the same thing?
+        }
+        
+        public void SetVehicleFlags(int param, bool remove)
+        {
+            if (PhysActor != null)
+            {
+                PhysActor.VehicleFlags(param, remove);
+            }
+        }
+
         public void SetGroup(UUID groupID, IClientAPI client)
         {
             _groupID = groupID;
@@ -2872,6 +3401,11 @@ namespace OpenSim.Region.Framework.Scenes
             }
         }
 
+        /// <summary>
+        /// Set the events that this part will pass on to listeners.
+        /// </summary>
+        /// <param name="scriptid"></param>
+        /// <param name="events"></param>
         public void SetScriptEvents(UUID scriptid, int events)
         {
             // scriptEvents oldparts;
@@ -2940,27 +3474,30 @@ namespace OpenSim.Region.Framework.Scenes
         {
             if (!Undoing)
             {
-                if (m_parentGroup != null)
+                if (!IgnoreUndoUpdate)
                 {
-                    lock (m_undo)
+                    if (m_parentGroup != null)
                     {
-                        if (m_undo.Count > 0)
+                        lock (m_undo)
                         {
-                            UndoState last = m_undo.Peek();
-                            if (last != null)
+                            if (m_undo.Count > 0)
                             {
-                                if (last.Compare(this))
-                                    return;
+                                UndoState last = m_undo.Peek();
+                                if (last != null)
+                                {
+                                    if (last.Compare(this))
+                                        return;
+                                }
                             }
+
+                            if (m_parentGroup.GetSceneMaxUndo() > 0)
+                            {
+                                UndoState nUndo = new UndoState(this);
+
+                                m_undo.Push(nUndo);
+                            }
+
                         }
-
-                        if (m_parentGroup.GetSceneMaxUndo() > 0)
-                        {
-                            UndoState nUndo = new UndoState(this);
-
-                            m_undo.Push(nUndo);
-                        }
-
                     }
                 }
             }
@@ -3431,11 +3968,36 @@ namespace OpenSim.Region.Framework.Scenes
             lock (m_undo)
             {
                 if (m_undo.Count > 0)
+                {
+                    UndoState nUndo = null;
+                    if (m_parentGroup.GetSceneMaxUndo() > 0)
                     {
-                        UndoState goback = m_undo.Pop();
-                        if (goback != null)
-                            goback.PlaybackState(this);
+                        nUndo = new UndoState(this);
+                    }
+                    UndoState goback = m_undo.Pop();
+                    if (goback != null)
+                    {
+                        goback.PlaybackState(this);
+                        if (nUndo != null)
+                            m_redo.Push(nUndo);
+                    }
                 }
+            }
+        }
+
+        public void Redo()
+        {
+            lock (m_redo)
+            {
+                if (m_parentGroup.GetSceneMaxUndo() > 0)
+                {
+                    UndoState nUndo = new UndoState(this);
+
+                    m_undo.Push(nUndo);
+                }
+                UndoState gofwd = m_redo.Pop();
+                if (gofwd != null)
+                    gofwd.PlayfwdState(this);
             }
         }
 
@@ -3482,6 +4044,18 @@ namespace OpenSim.Region.Framework.Scenes
                 (pos.Z != OffsetPosition.Z))
             {
                 Vector3 newPos = new Vector3(pos.X, pos.Y, pos.Z);
+
+                if (ParentGroup.RootPart.GetStatusSandbox())
+                {
+                    if (Util.GetDistanceTo(ParentGroup.RootPart.StatusSandboxPos, newPos) > 10)
+                    {
+                        ParentGroup.RootPart.ScriptSetPhysicsStatus(false);
+                        newPos = OffsetPosition;
+                        ParentGroup.Scene.SimChat(Utils.StringToBytes("Hit Sandbox Limit"),
+                              ChatTypeEnum.DebugChannel, 0x7FFFFFFF, ParentGroup.RootPart.AbsolutePosition, Name, UUID, false);
+                    }
+                }
+
                 OffsetPosition = newPos;
                 ScheduleTerseUpdate();
             }
@@ -3698,6 +4272,9 @@ namespace OpenSim.Region.Framework.Scenes
                             ((AggregateScriptEvents & scriptEvents.collision) != 0) ||
                             ((AggregateScriptEvents & scriptEvents.collision_end) != 0) ||
                             ((AggregateScriptEvents & scriptEvents.collision_start) != 0) ||
+                            ((AggregateScriptEvents & scriptEvents.land_collision_start) != 0) ||
+                            ((AggregateScriptEvents & scriptEvents.land_collision) != 0) ||
+                            ((AggregateScriptEvents & scriptEvents.land_collision_end) != 0) ||
                             (CollisionSound != UUID.Zero)
                             )
                         {
@@ -3771,7 +4348,6 @@ namespace OpenSim.Region.Framework.Scenes
                 (rot.Z != RotationOffset.Z) ||
                 (rot.W != RotationOffset.W))
             {
-                //StoreUndoState();
                 RotationOffset = rot;
                 ParentGroup.HasGroupChanged = true;
                 ScheduleTerseUpdate();
@@ -3821,9 +4397,13 @@ namespace OpenSim.Region.Framework.Scenes
             ScheduleFullUpdate();
         }
 
-        // Added to handle bug in libsecondlife's TextureEntry.ToBytes()
-        // not handling RGBA properly. Cycles through, and "fixes" the color
-        // info
+        /// <summary>
+        /// Update the textures on the part.
+        /// </summary>
+        /// Added to handle bug in libsecondlife's TextureEntry.ToBytes()
+        /// not handling RGBA properly. Cycles through, and "fixes" the color
+        /// info
+        /// <param name="tex"></param>
         public void UpdateTexture(Primitive.TextureEntry tex)
         {
             //Color4 tmpcolor;
@@ -3902,6 +4482,9 @@ namespace OpenSim.Region.Framework.Scenes
                 ((AggregateScriptEvents & scriptEvents.collision) != 0) ||
                 ((AggregateScriptEvents & scriptEvents.collision_end) != 0) ||
                 ((AggregateScriptEvents & scriptEvents.collision_start) != 0) ||
+                ((AggregateScriptEvents & scriptEvents.land_collision_start) != 0) ||
+                ((AggregateScriptEvents & scriptEvents.land_collision) != 0) ||
+                ((AggregateScriptEvents & scriptEvents.land_collision_end) != 0) ||
                 (CollisionSound != UUID.Zero)
                 )
             {
@@ -3924,6 +4507,8 @@ namespace OpenSim.Region.Framework.Scenes
 
             if (m_parentGroup == null)
             {
+//                m_log.DebugFormat(
+//                    "[SCENE OBJECT PART]: Scheduling part {0} {1} for full update in aggregateScriptEvents() since m_parentGroup == null", Name, LocalId);
                 ScheduleFullUpdate();
                 return;
             }
@@ -3940,9 +4525,15 @@ namespace OpenSim.Region.Framework.Scenes
             LocalFlags=(PrimFlags)objectflagupdate;
 
             if (m_parentGroup != null && m_parentGroup.RootPart == this)
+            {
                 m_parentGroup.aggregateScriptEvents();
+            }
             else
+            {
+//                m_log.DebugFormat(
+//                    "[SCENE OBJECT PART]: Scheduling part {0} {1} for full update in aggregateScriptEvents()", Name, LocalId);
                 ScheduleFullUpdate();
+            }
         }
 
         public int registerTargetWaypoint(Vector3 target, float tolerance)
@@ -3959,6 +4550,23 @@ namespace OpenSim.Region.Framework.Scenes
             if (m_parentGroup != null)
             {
                 m_parentGroup.unregisterTargetWaypoint(handle);
+            }
+        }
+
+        public int registerRotTargetWaypoint(Quaternion target, float tolerance)
+        {
+            if (m_parentGroup != null)
+            {
+                return m_parentGroup.registerRotTargetWaypoint(target, tolerance);
+            }
+            return 0;
+        }
+
+        public void unregisterRotTargetWaypoint(int handle)
+        {
+            if (m_parentGroup != null)
+            {
+                m_parentGroup.unregisterRotTargetWaypoint(handle);
             }
         }
 
@@ -4040,6 +4648,37 @@ namespace OpenSim.Region.Framework.Scenes
             _everyoneMask &= _nextOwnerMask;
 
             Inventory.ApplyNextOwnerPermissions();
+        }
+        public void UpdateLookAt()
+        {
+            try
+            {
+                if (APIDTarget != Quaternion.Identity)
+                {
+                    if (Single.IsNaN(APIDTarget.W) == true)
+                    {
+                        APIDTarget = Quaternion.Identity;
+                        return;
+                    }
+                    Quaternion rot = RotationOffset;
+                    Quaternion dir = (rot - APIDTarget);
+                    float speed = ((APIDStrength / APIDDamp) * (float)(Math.PI / 180.0f));
+                    if (dir.Z > speed)
+                    {
+                        rot.Z -= speed;
+                    }
+                    if (dir.Z < -speed)
+                    {
+                        rot.Z += speed;
+                    }
+                    rot.Normalize();
+                    UpdateRotation(rot);
+                }
+            }
+            catch (Exception ex)
+            {
+                m_log.Error("[Physics] " + ex);
+            }
         }
     }
 }

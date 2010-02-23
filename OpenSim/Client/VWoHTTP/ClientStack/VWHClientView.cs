@@ -343,6 +343,8 @@ namespace OpenSim.Client.VWoHTTP.ClientStack
         public event UUIDNameRequest OnTeleportHomeRequest = delegate { };
         public event ScriptAnswer OnScriptAnswer = delegate { };
         public event AgentSit OnUndo = delegate { };
+        public event AgentSit OnRedo = delegate { };
+        public event LandUndo OnLandUndo = delegate { };
         public event ForceReleaseControls OnForceReleaseControls = delegate { };
         public event GodLandStatRequest OnLandStatRequest = delegate { };
         public event DetailedEstateDataRequest OnDetailedEstateDataRequest = delegate { };
@@ -767,7 +769,7 @@ namespace OpenSim.Client.VWoHTTP.ClientStack
             throw new System.NotImplementedException();
         }
 
-        public void SendEstateManagersList(UUID invoice, UUID[] EstateManagers, uint estateID)
+        public void SendEstateList(UUID invoice, int code, UUID[] Data, uint estateID)
         {
             throw new System.NotImplementedException();
         }
@@ -1194,6 +1196,14 @@ namespace OpenSim.Client.VWoHTTP.ClientStack
         }
         
         public void SendGroupTransactionsSummaryDetails(IClientAPI sender,UUID groupID, UUID transactionID, UUID sessionID,int amt)
+        {
+        }
+
+        public void SendGroupVoteHistory(UUID groupID, UUID transactionID, GroupVoteHistory[] Votes)
+        {
+        }
+
+        public void SendGroupActiveProposals(UUID groupID, UUID transactionID, GroupActiveProposals[] Proposals)
         {
         }
     }

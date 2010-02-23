@@ -152,6 +152,8 @@ namespace OpenSim.Framework
 
     public delegate void AgentSit(IClientAPI remoteClient, UUID agentID);
 
+    public delegate void LandUndo(IClientAPI remoteClient);
+
     public delegate void AvatarPickerRequest(IClientAPI remoteClient, UUID agentdata, UUID queryID, string UserQuery);
 
     public delegate void GrabObject(
@@ -419,9 +421,9 @@ namespace OpenSim.Framework
     public delegate void AcceptCallingCard(IClientAPI remoteClient, UUID transactionID, UUID folderID);
 
     public delegate void DeclineCallingCard(IClientAPI remoteClient, UUID transactionID);
-    
+
     public delegate void SoundTrigger(
-        UUID soundId, UUID ownerid, UUID objid, UUID parentid, double Gain, Vector3 Position, UInt64 Handle);
+        UUID soundId, UUID ownerid, UUID objid, UUID parentid, double Gain, Vector3 Position, UInt64 Handle, float radius);
 
     public delegate void StartLure(byte lureType, string message, UUID targetID, IClientAPI client);
     public delegate void TeleportLureRequest(UUID lureID, uint teleportFlags, IClientAPI client);
@@ -988,6 +990,8 @@ namespace OpenSim.Framework
         event ScriptAnswer OnScriptAnswer;
 
         event AgentSit OnUndo;
+        event AgentSit OnRedo;
+        event LandUndo OnLandUndo;
 
         event ForceReleaseControls OnForceReleaseControls;
         event GodLandStatRequest OnLandStatRequest;
@@ -1271,7 +1275,7 @@ namespace OpenSim.Framework
         void SendHealth(float health);
 
 
-        void SendEstateManagersList(UUID invoice, UUID[] EstateManagers, uint estateID);
+        void SendEstateList(UUID invoice, int code, UUID[] Data, uint estateID);
 
         void SendBannedUserList(UUID invoice, EstateBan[] banlist, uint estateID);
 
@@ -1446,7 +1450,12 @@ namespace OpenSim.Framework
         void SendUserInfoReply(bool imViaEmail, bool visible, string email);
         
         void SendUseCachedMuteList();
+
         void SendMuteListUpdate(string filename);
+
+        void SendGroupActiveProposals(UUID groupID, UUID transactionID, GroupActiveProposals[] Proposals);
+
+        void SendGroupVoteHistory(UUID groupID, UUID transactionID, GroupVoteHistory[] Votes);
 
         void KillEndDone();
 
