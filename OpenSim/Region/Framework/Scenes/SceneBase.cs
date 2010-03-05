@@ -34,7 +34,7 @@ using log4net;
 using Nini.Config;
 using OpenSim.Framework;
 using OpenSim.Framework.Console;
-using OpenSim.Framework.Communications.Cache;
+
 using OpenSim.Region.Framework.Interfaces;
 using GridRegion = OpenSim.Services.Interfaces.GridRegion;
 
@@ -510,5 +510,16 @@ namespace OpenSim.Region.Framework.Scenes
 
             MainConsole.Instance.Commands.AddCommand(modulename, shared, command, shorthelp, longhelp, callback);
         }
+
+        public virtual ISceneObject DeserializeObject(string representation)
+        {
+            return null;
+        }
+
+        public virtual bool AllowScriptCrossings
+        {
+            get { return false; }
+        }
+
     }
 }

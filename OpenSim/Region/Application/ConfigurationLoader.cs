@@ -42,6 +42,8 @@ namespace OpenSim
     /// </summary>
     public class ConfigurationLoader
     {
+        private static readonly ILog m_log = LogManager.GetLogger(MethodBase.GetCurrentMethod().DeclaringType);
+        
         /// <summary>
         /// Various Config settings the region needs to start
         /// Physics Engine, Mesh Engine, GridMode, PhysicsPrim allowed, Neighbor, 
@@ -59,17 +61,6 @@ namespace OpenSim
         /// Grid Service Information.  This refers to classes and addresses of the grid service
         /// </summary>
         protected NetworkServersInfo m_networkServersInfo;
-
-        /// <summary>
-        /// Console logger
-        /// </summary>
-        private static readonly ILog m_log =
-                LogManager.GetLogger(
-                MethodBase.GetCurrentMethod().DeclaringType);
-
-        public ConfigurationLoader()
-        {
-        }
 
         /// <summary>
         /// Loads the region configuration
@@ -164,12 +155,12 @@ namespace OpenSim
             m_config.Source = new IniConfigSource();
             m_config.Source.Merge(DefaultConfig());
 
-            m_log.Info("[CONFIG] Reading configuration settings");
+            m_log.Info("[CONFIG]: Reading configuration settings");
 
             if (sources.Count == 0)
             {
-                m_log.FatalFormat("[CONFIG] Could not load any configuration");
-                m_log.FatalFormat("[CONFIG] Did you copy the OpenSim.ini.example file to OpenSim.ini?");
+                m_log.FatalFormat("[CONFIG]: Could not load any configuration");
+                m_log.FatalFormat("[CONFIG]: Did you copy the OpenSim.ini.example file to OpenSim.ini?");
                 Environment.Exit(1);
             }
 
@@ -182,13 +173,12 @@ namespace OpenSim
 
             if (!iniFileExists)
             {
-                m_log.FatalFormat("[CONFIG] Could not load any configuration");
-                m_log.FatalFormat("[CONFIG] Configuration exists, but there was an error loading it!");
+                m_log.FatalFormat("[CONFIG]: Could not load any configuration");
+                m_log.FatalFormat("[CONFIG]: Configuration exists, but there was an error loading it!");
                 Environment.Exit(1);
             }
 
             // Make sure command line options take precedence
-            //
             m_config.Source.Merge(argvSource);
 
             ReadConfigSettings();
@@ -257,20 +247,17 @@ namespace OpenSim
 
             if (!IsUri(iniPath))
             {
-                m_log.InfoFormat("[CONFIG] Reading configuration file {0}",
-                        Path.GetFullPath(iniPath));
+                m_log.InfoFormat("[CONFIG]: Reading configuration file {0}", Path.GetFullPath(iniPath));
 
                 m_config.Source.Merge(new IniConfigSource(iniPath));
                 success = true;
             }
             else
             {
-                m_log.InfoFormat("[CONFIG] {0} is a http:// URI, fetching ...",
-                        iniPath);
+                m_log.InfoFormat("[CONFIG]: {0} is a http:// URI, fetching ...", iniPath);
 
                 // The ini file path is a http URI
                 // Try to read it
-                //
                 try
                 {
                     XmlReader r = XmlReader.Create(iniPath);
@@ -281,7 +268,7 @@ namespace OpenSim
                 }
                 catch (Exception e)
                 {
-                    m_log.FatalFormat("[CONFIG] Exception reading config from URI {0}\n" + e.ToString(), iniPath);
+                    m_log.FatalFormat("[CONFIG]: Exception reading config from URI {0}\n" + e.ToString(), iniPath);
                     Environment.Exit(1);
                 }
             }
@@ -304,7 +291,6 @@ namespace OpenSim
 
                 config.Set("region_info_source", "filesystem");
 
-                config.Set("gridmode", false);
                 config.Set("physics", "OpenDynamicsEngine");
                 config.Set("meshing", "Meshmerizer");
                 config.Set("physical_prim", true);
@@ -342,19 +328,7 @@ namespace OpenSim
                 if (null == config)
                     config = defaultConfig.AddConfig("Network");
 
-                config.Set("default_location_x", 1000);
-                config.Set("default_location_y", 1000);
                 config.Set("http_listener_port", ConfigSettings.DefaultRegionHttpPort);
-                config.Set("remoting_listener_port", ConfigSettings.DefaultRegionRemotingPort);
-                config.Set("grid_server_url", "http://127.0.0.1:" + ConfigSettings.DefaultGridServerHttpPort.ToString());
-                config.Set("grid_send_key", "null");
-                config.Set("grid_recv_key", "null");
-                config.Set("user_server_url", "http://127.0.0.1:" + ConfigSettings.DefaultUserServerHttpPort.ToString());
-                config.Set("user_send_key", "null");
-                config.Set("user_recv_key", "null");
-                config.Set("asset_server_url", "http://127.0.0.1:" + ConfigSettings.DefaultAssetServerHttpPort.ToString());
-                config.Set("inventory_server_url", "http://127.0.0.1:" + ConfigSettings.DefaultInventoryServerHttpPort.ToString());
-                config.Set("secure_inventory_server", "true");
             }
 
             return defaultConfig;
@@ -368,7 +342,6 @@ namespace OpenSim
             IConfig startupConfig = m_config.Source.Configs["Startup"];
             if (startupConfig != null)
             {
-                m_configSettings.Standalone = !startupConfig.GetBoolean("gridmode", false);
                 m_configSettings.PhysicsEngine = startupConfig.GetString("physics");
                 m_configSettings.MeshEngineName = startupConfig.GetString("meshing");
                 m_configSettings.PhysicalPrim = startupConfig.GetBoolean("physical_prim", true);

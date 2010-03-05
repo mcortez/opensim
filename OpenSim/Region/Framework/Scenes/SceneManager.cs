@@ -422,7 +422,7 @@ namespace OpenSim.Region.Framework.Scenes
 
                         if (!scenePresence.IsChildAgent)
                         {
-                            m_log.ErrorFormat("Packet debug for {0} {1} set to {2}",
+                            m_log.DebugFormat("Packet debug for {0} {1} set to {2}",
                                               scenePresence.Firstname,
                                               scenePresence.Lastname,
                                               newDebug);
@@ -468,11 +468,11 @@ namespace OpenSim.Region.Framework.Scenes
             return presences;
         }
 
-        public RegionInfo GetRegionInfo(ulong regionHandle)
+        public RegionInfo GetRegionInfo(UUID regionID)
         {
             foreach (Scene scene in m_localScenes)
             {
-                if (scene.RegionInfo.RegionHandle == regionHandle)
+                if (scene.RegionInfo.RegionID == regionID)
                 {
                     return scene.RegionInfo;
                 }

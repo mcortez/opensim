@@ -131,9 +131,6 @@ namespace OpenSim.Region.CoreModules.ServiceConnectorsOut.Inventory
 
             if (!m_Initialized)
             {
-                // ugh!
-                scene.CommsManager.UserProfileCacheService.SetInventoryService(this);
-                scene.CommsManager.UserService.SetInventoryService(this);
                 m_Initialized = true;
             }
 

@@ -38,7 +38,7 @@ using OpenMetaverse;
 using OpenMetaverse.Packets;
 using OpenSim;
 using OpenSim.Framework;
-using OpenSim.Framework.Communications.Cache;
+
 using OpenSim.Region.CoreModules;
 using OpenSim.Region.CoreModules.World.Land;
 using OpenSim.Region.CoreModules.World.Terrain;
@@ -52,9 +52,9 @@ using OpenSim.Region.ScriptEngine.Shared.ScriptBase;
 using OpenSim.Region.ScriptEngine.Interfaces;
 using OpenSim.Region.ScriptEngine.Shared.Api.Interfaces;
 using OpenSim.Services.Interfaces;
-
-using PrimType = OpenSim.Region.Framework.Scenes.PrimType;
 using GridRegion = OpenSim.Services.Interfaces.GridRegion;
+using PresenceInfo = OpenSim.Services.Interfaces.PresenceInfo;
+using PrimType = OpenSim.Region.Framework.Scenes.PrimType;
 using AssetLandmark = OpenSim.Framework.AssetLandmark;
 
 using LSL_Float = OpenSim.Region.ScriptEngine.Shared.LSL_Types.LSLFloat;
@@ -848,10 +848,10 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
         public string resolveName(UUID objecUUID)
         {
             // try avatar username surname
-            CachedUserInfo profile = World.CommsManager.UserProfileCacheService.GetUserDetails(objecUUID);
-            if (profile != null && profile.UserProfile != null)
+            UserAccount account = World.UserAccountService.GetUserAccount(World.RegionInfo.ScopeID, objecUUID);
+            if (account != null)
             {
-                string avatarname = profile.UserProfile.FirstName + " " + profile.UserProfile.SurName;
+                string avatarname = account.Name;
                 return avatarname;
             }
             // try an scene object
@@ -3887,13 +3887,12 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
 
             UUID uuid = (UUID)id;
 
-            UserProfileData userProfile =
-                    World.CommsManager.UserService.GetUserProfile(uuid);
+            UserAccount account = World.UserAccountService.GetUserAccount(World.RegionInfo.ScopeID, uuid);
 
-            UserAgentData userAgent =
-                    World.CommsManager.UserService.GetAgentByUUID(uuid);
+            PresenceInfo[] pinfos = World.PresenceService.GetAgents(new string[] { uuid.ToString() });
+            PresenceInfo pinfo = PresenceInfo.GetOnlinePresence(pinfos);
 
-            if (userProfile == null || userAgent == null)
+            if (pinfo == null)
                 return UUID.Zero.ToString();
 
             string reply = String.Empty;
@@ -3902,17 +3901,17 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
             {
             case 1: // DATA_ONLINE (0|1)
                 // TODO: implement fetching of this information
-                if (userProfile.CurrentAgent!=null && userProfile.CurrentAgent.AgentOnline)
+                if (pinfo != null)
                     reply = "1";
-                else
+                else 
                     reply = "0";
                 break;
             case 2: // DATA_NAME (First Last)
-                reply = userProfile.FirstName + " " + userProfile.SurName;
+                reply = account.FirstName + " " + account.LastName;
                 break;
             case 3: // DATA_BORN (YYYY-MM-DD)
                 DateTime born = new DateTime(1970, 1, 1, 0, 0, 0, 0);
-                born = born.AddSeconds(userProfile.Created);
+                born = born.AddSeconds(account.Created);
                 reply = born.ToString("yyyy-MM-dd");
                 break;
             case 4: // DATA_RATING (0,0,0,0,0,0)
@@ -9705,88 +9704,9 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
 
                 Notecard nc = new Notecard();
                 nc.lastRef = DateTime.Now;
-                nc.text = ParseText(text.Replace("\r", "").Split('\n'));
+                nc.text = SLUtil.ParseNotecardToList(text).ToArray();
                 m_Notecards[assetID] = nc;
             }
-        }
-
-        protected static string[] ParseText(string[] input)
-        {
-            int idx = 0;
-            int level = 0;
-            List<string> output = new List<string>();
-            string[] words;
-
-            while (idx < input.Length)
-            {
-                if (input[idx] == "{")
-                {
-                    level++;
-                    idx++;
-                    continue;
-                }
-
-                if (input[idx]== "}")
-                {
-                    level--;
-                    idx++;
-                    continue;
-                }
-
-                switch (level)
-                {
-                case 0:
-                    words = input[idx].Split(' '); // Linden text ver
-                    // Notecards are created *really* empty. Treat that as "no text" (just like after saving an empty notecard)
-                    if (words.Length < 3)
-                        return new String[0];
-
-                    int version = int.Parse(words[3]);
-                    if (version != 2)
-                        return new String[0];
-                    break;
-                case 1:
-                    words = input[idx].Split(' ');
-                    if (words[0] == "LLEmbeddedItems")
-                        break;
-                    if (words[0] == "Text")
-                    {
-                        int len = int.Parse(words[2]);
-                        idx++;
-
-                        int count = -1;
-
-                        while (count < len)
-                        {
-                            // int l = input[idx].Length;
-                            string ln = input[idx];
-
-                            int need = len-count-1;
-                            if (ln.Length > need)
-                                ln = ln.Substring(0, need);
-
-                            output.Add(ln);
-                            count += ln.Length + 1;
-                            idx++;
-                        }
-
-                        return output.ToArray();
-                    }
-                    break;
-                case 2:
-                    words = input[idx].Split(' '); // count
-                    if (words[0] == "count")
-                    {
-                        int c = int.Parse(words[1]);
-                        if (c > 0)
-                            return new String[0];
-                        break;
-                    }
-                    break;
-                }
-                idx++;
-            }
-            return output.ToArray();
         }
 
         public static bool IsCached(UUID assetID)
