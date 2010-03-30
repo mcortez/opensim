@@ -554,7 +554,7 @@ namespace OpenSim.Region.OptionalModules.Avatar.XmlRpcGroups
 
         public GroupRecord GetGroupRecord(string name)
         {
-            return m_groupData.GetGroupRecord(null, UUID.Zero, name);
+            return m_groupData.GetGroupRecord(UUID.Zero, UUID.Zero, name);
         }
         
         public void ActivateGroup(IClientAPI remoteClient, UUID groupID)
