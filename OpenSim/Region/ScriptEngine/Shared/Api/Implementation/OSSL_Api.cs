@@ -36,12 +36,11 @@ using OpenMetaverse;
 using Nini.Config;
 using OpenSim;
 using OpenSim.Framework;
-using OpenSim.Framework.Communications.Cache;
+
 using OpenSim.Framework.Console;
 using OpenSim.Region.CoreModules.Avatar.NPC;
 using OpenSim.Region.Framework.Interfaces;
 using OpenSim.Region.Framework.Scenes;
-using OpenSim.Region.Framework.Scenes.Hypergrid;
 using OpenSim.Region.ScriptEngine.Shared;
 using OpenSim.Region.ScriptEngine.Shared.Api.Plugins;
 using OpenSim.Region.ScriptEngine.Shared.ScriptBase;
@@ -607,21 +606,12 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
                         // and convert the regionName to the target region
                         if (regionName.Contains(".") && regionName.Contains(":"))
                         {
+                            List<GridRegion> regions = World.GridService.GetRegionsByName(World.RegionInfo.ScopeID, regionName, 1);
                             // Try to link the region
-                            IHyperlinkService hyperService = World.RequestModuleInterface<IHyperlinkService>();
-                            if (hyperService != null)
+                            if (regions != null && regions.Count > 0)
                             {
-                                GridRegion regInfo = hyperService.TryLinkRegion(presence.ControllingClient,
-                                                                                regionName);
-                                // Get the region name
-                                if (regInfo != null)
-                                {
-                                    regionName = regInfo.RegionName;
-                                }
-                                else
-                                {
-                                    // Might need to ping the client here in case of failure??
-                                }
+                                GridRegion regInfo = regions[0];
+                                regionName = regInfo.RegionName;
                             }
                         }
                         presence.ControllingClient.SendTeleportLocationStart();
@@ -707,10 +697,11 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
             CheckThreatLevel(ThreatLevel.None, "osGetAgents");
 
             LSL_List result = new LSL_List();
-            foreach (ScenePresence avatar in World.GetAvatars())
+            World.ForEachScenePresence(delegate(ScenePresence sp)
             {
-                result.Add(avatar.Name);
-            }
+                if (!sp.IsChildAgent)
+                    result.Add(sp.Name);
+            });
             return result;
         }
 
@@ -1484,7 +1475,7 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
             m_host.AddScriptLPS(1);
 
             // Create new asset
-            AssetBase asset = new AssetBase(UUID.Random(), notecardName, (sbyte)AssetType.Notecard);
+            AssetBase asset = new AssetBase(UUID.Random(), notecardName, (sbyte)AssetType.Notecard, m_host.OwnerID.ToString());
             asset.Description = "Script Generated Notecard";
             string notecardData = String.Empty;
 
@@ -1691,15 +1682,14 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
         {
             CheckThreatLevel(ThreatLevel.Low, "osAvatarName2Key");
 
-            CachedUserInfo userInfo = World.CommsManager.UserProfileCacheService.GetUserDetails(firstname, lastname);
-
-            if (null == userInfo)
+            UserAccount account = World.UserAccountService.GetUserAccount(World.RegionInfo.ScopeID, firstname, lastname);
+            if (null == account)
             {
                 return UUID.Zero.ToString();
             }
             else
             {
-                return userInfo.UserProfile.ID.ToString();
+                return account.PrincipalID.ToString();
             }
         }
 
@@ -1710,15 +1700,14 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
 
             if (UUID.TryParse(id, out key))
             {
-                CachedUserInfo userInfo = World.CommsManager.UserProfileCacheService.GetUserDetails(key);
-
-                if (null == userInfo)
+                UserAccount account = World.UserAccountService.GetUserAccount(World.RegionInfo.ScopeID, key);
+                if (null == account)
                 {
                     return "";
                 }
                 else
                 {
-                    return userInfo.UserProfile.Name;
+                    return account.Name;
                 }
             }
             else
@@ -1997,19 +1986,20 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
             CheckThreatLevel(ThreatLevel.Severe, "osKickAvatar");
             if (World.Permissions.CanRunConsoleCommand(m_host.OwnerID))
             {
-                foreach (ScenePresence presence in World.GetAvatars())
+                World.ForEachScenePresence(delegate(ScenePresence sp)
                 {
-                    if ((presence.Firstname == FirstName) &&
-                        presence.Lastname == SurName)
+                    if (!sp.IsChildAgent &&
+                        sp.Firstname == FirstName &&
+                        sp.Lastname == SurName)
                     {
                         // kick client...
                         if (alert != null)
-                            presence.ControllingClient.Kick(alert);
+                            sp.ControllingClient.Kick(alert);
 
                         // ...and close on our side
-                        presence.Scene.IncomingCloseAgent(presence.UUID);
+                        sp.Scene.IncomingCloseAgent(sp.UUID);
                     }
-                }
+                });
             }
         }
         

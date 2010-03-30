@@ -34,7 +34,7 @@ using log4net;
 using Nini.Config;
 using OpenSim.Framework;
 using OpenSim.Framework.Console;
-using OpenSim.Framework.Communications.Cache;
+
 using OpenSim.Region.Framework.Interfaces;
 using GridRegion = OpenSim.Services.Interfaces.GridRegion;
 
@@ -189,6 +189,21 @@ namespace OpenSim.Region.Framework.Scenes
         /// </summary>
         /// <param name="agentID"></param>
         public abstract void RemoveClient(UUID agentID);
+
+        public bool TryGetScenePresence(UUID agentID, out object scenePresence)
+        {
+            scenePresence = null;
+            ScenePresence sp = null;
+            if (TryGetScenePresence(agentID, out sp))
+            {
+                scenePresence = sp;
+                return true;
+            }
+
+            return false;
+        }
+
+        public abstract bool TryGetScenePresence(UUID agentID, out ScenePresence scenePresence);
 
         #endregion
 
@@ -510,5 +525,16 @@ namespace OpenSim.Region.Framework.Scenes
 
             MainConsole.Instance.Commands.AddCommand(modulename, shared, command, shorthelp, longhelp, callback);
         }
+
+        public virtual ISceneObject DeserializeObject(string representation)
+        {
+            return null;
+        }
+
+        public virtual bool AllowScriptCrossings
+        {
+            get { return false; }
+        }
+
     }
 }

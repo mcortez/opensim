@@ -34,6 +34,7 @@ using OpenSim.Region.Framework.Scenes;
 using OpenSim.Region.CoreModules.Avatar.NPC;
 using OpenSim.Framework;
 using Timer=System.Timers.Timer;
+using OpenSim.Services.Interfaces;
 
 namespace OpenSim.Region.OptionalModules.World.NPC
 {
@@ -63,11 +64,16 @@ namespace OpenSim.Region.OptionalModules.World.NPC
             if (m_appearanceCache.ContainsKey(target))
                 return m_appearanceCache[target];
 
-            AvatarAppearance x = scene.CommsManager.AvatarService.GetUserAppearance(target);
+            AvatarData adata = scene.AvatarService.GetAvatar(target);
+            if (adata != null)
+            {
+                AvatarAppearance x = adata.ToAvatarAppearance(target);
 
-            m_appearanceCache.Add(target, x);
+                m_appearanceCache.Add(target, x);
 
-            return x;
+                return x;
+            }
+            return new AvatarAppearance();
         }
 
         public UUID CreateNPC(string firstname, string lastname,Vector3 position, Scene scene, UUID cloneAppearanceFrom)
@@ -104,7 +110,7 @@ namespace OpenSim.Region.OptionalModules.World.NPC
                 if (m_avatars.ContainsKey(agentID))
                 {
                     ScenePresence sp;
-                    scene.TryGetAvatar(agentID, out sp);
+                    scene.TryGetScenePresence(agentID, out sp);
                     sp.DoAutoPilot(0, pos, m_avatars[agentID]);
                 }
             }
@@ -159,7 +165,7 @@ namespace OpenSim.Region.OptionalModules.World.NPC
                     p_scene.AddNewClient(npcAvatar);
 
                     ScenePresence sp;
-                    if (p_scene.TryGetAvatar(npcAvatar.AgentId, out sp))
+                    if (p_scene.TryGetScenePresence(npcAvatar.AgentId, out sp))
                     {
                         AvatarAppearance x = GetAppearance(p_cloneAppearanceFrom, p_scene);
 

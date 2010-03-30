@@ -32,7 +32,7 @@ using Nini.Config;
 using OpenMetaverse;
 using OpenSim.Framework;
 using OpenSim.Framework.Communications;
-using OpenSim.Framework.Communications.Cache;
+
 using OpenSim.Framework.Console;
 using OpenSim.Framework.Servers;
 using OpenSim.Framework.Servers.HttpServer;
@@ -45,6 +45,7 @@ using OpenSim.Region.CoreModules.Avatar.Gods;
 using OpenSim.Region.CoreModules.ServiceConnectorsOut.Asset;
 using OpenSim.Region.CoreModules.ServiceConnectorsOut.Inventory;
 using OpenSim.Region.CoreModules.ServiceConnectorsOut.Grid;
+using OpenSim.Region.CoreModules.ServiceConnectorsOut.UserAccounts;
 using OpenSim.Services.Interfaces;
 using OpenSim.Tests.Common.Mock;
 
@@ -60,7 +61,7 @@ namespace OpenSim.Tests.Common.Setup
         private static ISharedRegionModule m_assetService = null;
         private static ISharedRegionModule m_inventoryService = null;
         private static ISharedRegionModule m_gridService = null;
-        private static TestCommunicationsManager commsManager = null;
+        private static ISharedRegionModule m_userAccountService = null;
 
         /// <summary>
         /// Set up a test scene
@@ -83,21 +84,23 @@ namespace OpenSim.Tests.Common.Setup
         public static TestScene SetupScene(String realServices)
         {
             return SetupScene(
-                "Unit test region", UUID.Random(), 1000, 1000, new TestCommunicationsManager(), realServices);
+                "Unit test region", UUID.Random(), 1000, 1000, realServices);
         }
 
-        /// <summary>
-        /// Set up a test scene
-        /// </summary>
-        /// 
-        /// <param name="realServices">Starts real inventory and asset services, as opposed to mock ones, if true</param>
-        /// <param name="cm">This should be the same if simulating two scenes within a standalone</param>
-        /// <returns></returns>
-        public static TestScene SetupScene(TestCommunicationsManager cm, String realServices)
-        {
-            return SetupScene(
-                "Unit test region", UUID.Random(), 1000, 1000, cm, "");
-        }
+        // REFACTORING PROBLEM. No idea what the difference is with the previous one
+        ///// <summary>
+        ///// Set up a test scene
+        ///// </summary>
+        ///// 
+        ///// <param name="realServices">Starts real inventory and asset services, as opposed to mock ones, if true</param>
+        ///// <param name="cm">This should be the same if simulating two scenes within a standalone</param>
+        ///// <returns></returns>
+        //public static TestScene SetupScene(String realServices)
+        //{
+        //    return SetupScene(
+        //        "Unit test region", UUID.Random(), 1000, 1000, "");
+        //}
+
         /// <summary>
         /// Set up a test scene
         /// </summary>
@@ -107,9 +110,9 @@ namespace OpenSim.Tests.Common.Setup
         /// <param name="y">Y co-ordinate of the region</param>
         /// <param name="cm">This should be the same if simulating two scenes within a standalone</param>
         /// <returns></returns>
-        public static TestScene SetupScene(string name, UUID id, uint x, uint y, TestCommunicationsManager cm)
+        public static TestScene SetupScene(string name, UUID id, uint x, uint y)
         {
-            return SetupScene(name, id, x, y, cm, "");
+            return SetupScene(name, id, x, y,"");
         }
 
 
@@ -125,23 +128,24 @@ namespace OpenSim.Tests.Common.Setup
         /// <param name="realServices">Starts real inventory and asset services, as opposed to mock ones, if true</param>
         /// <returns></returns>
         public static TestScene SetupScene(
-            string name, UUID id, uint x, uint y, TestCommunicationsManager cm, String realServices)
+            string name, UUID id, uint x, uint y, String realServices)
         {
             bool newScene = false;
 
             Console.WriteLine("Setting up test scene {0}", name);
-            
-            // If cm is the same as our last commsManager used, this means the tester wants to link
-            // regions. In this case, don't use the sameshared region modules and dont initialize them again.
-            // Also, no need to start another MainServer and MainConsole instance.
-            if (cm == null || cm != commsManager)
-            {
-                System.Console.WriteLine("Starting a brand new scene");
-                newScene = true;
-                MainConsole.Instance = new LocalConsole("TEST PROMPT");
-                MainServer.Instance = new BaseHttpServer(980);
-                commsManager = cm;
-            }
+
+            // REFACTORING PROBLEM!
+            //// If cm is the same as our last commsManager used, this means the tester wants to link
+            //// regions. In this case, don't use the sameshared region modules and dont initialize them again.
+            //// Also, no need to start another MainServer and MainConsole instance.
+            //if (cm == null || cm != commsManager)
+            //{
+            //    System.Console.WriteLine("Starting a brand new scene");
+            //    newScene = true;
+            //    MainConsole.Instance = new LocalConsole("TEST PROMPT");
+            //    MainServer.Instance = new BaseHttpServer(980);
+            //    commsManager = cm;
+            //}
 
             // We must set up a console otherwise setup of some modules may fail
             RegionInfo regInfo = new RegionInfo(x, y, new IPEndPoint(IPAddress.Loopback, 9000), "127.0.0.1");
@@ -149,13 +153,13 @@ namespace OpenSim.Tests.Common.Setup
             regInfo.RegionID = id;
 
             AgentCircuitManager acm = new AgentCircuitManager();
-            SceneCommunicationService scs = new SceneCommunicationService(cm);
+            SceneCommunicationService scs = new SceneCommunicationService();
 
             StorageManager sm = new StorageManager("OpenSim.Data.Null.dll", "", "");
             IConfigSource configSource = new IniConfigSource();
 
             TestScene testScene = new TestScene(
-                regInfo, acm, cm, scs, sm, null, false, false, false, configSource, null);
+                regInfo, acm, scs, sm, null, false, false, false, configSource, null);
 
             INonSharedRegionModule capsModule = new CapabilitiesModule();
             capsModule.Initialise(new IniConfigSource());
@@ -175,13 +179,16 @@ namespace OpenSim.Tests.Common.Setup
                     StartAssetService(testScene, true);
                 else
                     StartAssetService(testScene, false);
+                
                 if (realServices.Contains("inventory"))
                     StartInventoryService(testScene, true);
                 else
                     StartInventoryService(testScene, false);
+                
                 if (realServices.Contains("grid"))
                     StartGridService(testScene, true);
-
+                
+                StartUserAccountService(testScene, realServices.Contains("useraccounts"));
             }
             // If not, make sure the shared module gets references to this new scene
             else
@@ -190,11 +197,13 @@ namespace OpenSim.Tests.Common.Setup
                 m_assetService.RegionLoaded(testScene);
                 m_inventoryService.AddRegion(testScene);
                 m_inventoryService.RegionLoaded(testScene);
+                m_userAccountService.AddRegion(testScene);
+                m_userAccountService.RegionLoaded(testScene);
             }
+            
             m_inventoryService.PostInitialise();
             m_assetService.PostInitialise();
-
-            testScene.CommsManager.UserService.SetInventoryService(testScene.InventoryService);
+            m_userAccountService.PostInitialise();
 
             testScene.SetModuleInterfaces();
 
@@ -205,6 +214,14 @@ namespace OpenSim.Tests.Common.Setup
             physicsPluginManager.LoadPluginsFromAssembly("Physics/OpenSim.Region.Physics.BasicPhysicsPlugin.dll");
             testScene.PhysicsScene
                 = physicsPluginManager.GetPhysicsScene("basicphysics", "ZeroMesher",   new IniConfigSource(), "test");
+
+            // It's really not a good idea to use static variables as they carry over between tests, leading to
+            // problems that are extremely hard to debug.  Really, these static fields need to be eliminated -
+            // tests using multiple regions that need to share modules need to find another solution.
+            m_assetService = null;
+            m_inventoryService = null;
+            m_gridService = null;
+            m_userAccountService = null;
             
             return testScene;
         }
@@ -269,6 +286,38 @@ namespace OpenSim.Tests.Common.Setup
             //testScene.AddRegionModule(m_gridService.Name, m_gridService);
         }
 
+        /// <summary>
+        /// Start a user account service, whether real or mock
+        /// </summary>
+        /// <param name="testScene"></param>
+        /// <param name="real">Starts a real service if true, a mock service if not</param>
+        private static void StartUserAccountService(Scene testScene, bool real)
+        {
+            IConfigSource config = new IniConfigSource();
+            config.AddConfig("Modules");
+            config.AddConfig("UserAccountService");
+            config.Configs["Modules"].Set("UserAccountServices", "LocalUserAccountServicesConnector");
+            config.Configs["UserAccountService"].Set("StorageProvider", "OpenSim.Data.Null.dll");
+            
+            if (real)
+                config.Configs["UserAccountService"].Set(
+                    "LocalServiceModule", "OpenSim.Services.UserAccountService.dll:UserAccountService");
+            else
+                config.Configs["UserAccountService"].Set(
+                    "LocalServiceModule", "OpenSim.Tests.Common.dll:MockUserAccountService");
+            
+            if (m_userAccountService == null)
+            {
+                ISharedRegionModule userAccountService = new LocalUserAccountServicesConnector();
+                userAccountService.Initialise(config);
+                m_userAccountService = userAccountService;
+            }
+            //else
+            //    config.Configs["GridService"].Set("LocalServiceModule", "OpenSim.Tests.Common.dll:TestGridService");
+            m_userAccountService.AddRegion(testScene);
+            m_userAccountService.RegionLoaded(testScene);
+            testScene.AddRegionModule(m_userAccountService.Name, m_userAccountService);
+        }
 
         /// <summary>
         /// Setup modules for a scene using their default settings.

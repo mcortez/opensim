@@ -83,7 +83,8 @@ namespace OpenSim.Region.Examples.SimpleModule
         public event DeRezObject OnDeRezObject;
         public event Action<IClientAPI> OnRegionHandShakeReply;
         public event GenericCall2 OnRequestWearables;
-        public event GenericCall2 OnCompleteMovementToRegion;
+        public event GenericCall1 OnCompleteMovementToRegion;
+        public event UpdateAgent OnPreAgentUpdate;
         public event UpdateAgent OnAgentUpdate;
         public event AgentRequestSit OnAgentRequestSit;
         public event AgentSit OnAgentSit;
@@ -353,7 +354,11 @@ namespace OpenSim.Region.Examples.SimpleModule
             get { return true; }
             set { }
         }
-
+        public bool IsLoggingOut
+        {
+            get { return false; }
+            set { }
+        }
         public UUID ActiveGroupId
         {
             get { return UUID.Zero; }
@@ -655,7 +660,7 @@ namespace OpenSim.Region.Examples.SimpleModule
 
             if (OnCompleteMovementToRegion != null)
             {
-                OnCompleteMovementToRegion();
+                OnCompleteMovementToRegion(this);
             }
         }
         public void SendAssetUploadCompleteMessage(sbyte AssetType, bool Success, UUID AssetFullID)
@@ -1143,6 +1148,14 @@ namespace OpenSim.Region.Examples.SimpleModule
         }
 
         public void SendGroupActiveProposals(UUID groupID, UUID transactionID, GroupActiveProposals[] Proposals)
+        {
+        }
+
+        public void SendChangeUserRights(UUID agentID, UUID friendID, int rights)
+        {
+        }
+
+        public void SendTextBoxRequest(string message, int chatChannel, string objectname, string ownerFirstName, string ownerLastName, UUID objectId)
         {
         }
     }

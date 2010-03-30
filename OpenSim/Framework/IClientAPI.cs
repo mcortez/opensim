@@ -93,6 +93,8 @@ namespace OpenSim.Framework
 
     public delegate void SetAlwaysRun(IClientAPI remoteClient, bool SetAlwaysRun);
 
+    public delegate void GenericCall1(IClientAPI remoteClient);
+
     public delegate void GenericCall2();
 
     // really don't want to be passing packets in these events, so this is very temporary.
@@ -828,6 +830,11 @@ namespace OpenSim.Framework
         /// </value>
         bool IsActive { get; set; }
 
+        /// <value>
+        /// Determines whether the client is logging out or not.
+        /// </value>
+        bool IsLoggingOut { get; set; }
+        
         bool SendLogoutPacketWhenClosing { set; }
 
         // [Obsolete("LLClientView Specific - Circuits are unique to LLClientView")]
@@ -873,7 +880,8 @@ namespace OpenSim.Framework
         event DeRezObject OnDeRezObject;
         event Action<IClientAPI> OnRegionHandShakeReply;
         event GenericCall2 OnRequestWearables;
-        event GenericCall2 OnCompleteMovementToRegion;
+        event GenericCall1 OnCompleteMovementToRegion;
+        event UpdateAgent OnPreAgentUpdate;
         event UpdateAgent OnAgentUpdate;
         event AgentRequestSit OnAgentRequestSit;
         event AgentSit OnAgentSit;
@@ -1471,5 +1479,7 @@ namespace OpenSim.Framework
         
         void SendGroupTransactionsSummaryDetails(IClientAPI sender,UUID groupID, UUID transactionID, UUID sessionID,int amt);
         
+        void SendChangeUserRights(UUID agentID, UUID friendID, int rights);
+        void SendTextBoxRequest(string message, int chatChannel, string objectname, string ownerFirstName, string ownerLastName, UUID objectId);
     }
 }

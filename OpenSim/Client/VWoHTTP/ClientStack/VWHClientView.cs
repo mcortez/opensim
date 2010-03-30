@@ -196,7 +196,11 @@ namespace OpenSim.Client.VWoHTTP.ClientStack
             get { throw new System.NotImplementedException(); }
             set { throw new System.NotImplementedException(); }
         }
-
+        public bool IsLoggingOut
+        {
+            get { throw new System.NotImplementedException(); }
+            set { throw new System.NotImplementedException(); }
+        }
         public bool SendLogoutPacketWhenClosing
         {
             set { throw new System.NotImplementedException(); }
@@ -242,7 +246,8 @@ namespace OpenSim.Client.VWoHTTP.ClientStack
         public event DeRezObject OnDeRezObject = delegate { };
         public event Action<IClientAPI> OnRegionHandShakeReply = delegate { };
         public event GenericCall2 OnRequestWearables = delegate { };
-        public event GenericCall2 OnCompleteMovementToRegion = delegate { };
+        public event GenericCall1 OnCompleteMovementToRegion = delegate { };
+        public event UpdateAgent OnPreAgentUpdate;
         public event UpdateAgent OnAgentUpdate = delegate { };
         public event AgentRequestSit OnAgentRequestSit = delegate { };
         public event AgentSit OnAgentSit = delegate { };
@@ -1204,6 +1209,14 @@ namespace OpenSim.Client.VWoHTTP.ClientStack
         }
 
         public void SendGroupActiveProposals(UUID groupID, UUID transactionID, GroupActiveProposals[] Proposals)
+        {
+        }
+
+        public void SendChangeUserRights(UUID agentID, UUID friendID, int rights)
+        {
+        }
+
+        public void SendTextBoxRequest(string message, int chatChannel, string objectname, string ownerFirstName, string ownerLastName, UUID objectId)
         {
         }
     }

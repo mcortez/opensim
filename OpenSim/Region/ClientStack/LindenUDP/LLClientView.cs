@@ -40,11 +40,10 @@ using OpenMetaverse.Packets;
 using OpenMetaverse.StructuredData;
 using OpenSim.Framework;
 using OpenSim.Framework.Client;
-using OpenSim.Framework.Communications.Cache;
+
 using OpenSim.Framework.Statistics;
 using OpenSim.Region.Framework.Interfaces;
 using OpenSim.Region.Framework.Scenes;
-using OpenSim.Region.Framework.Scenes.Hypergrid;
 using OpenSim.Services.Interfaces;
 using Timer = System.Timers.Timer;
 using AssetLandmark = OpenSim.Framework.AssetLandmark;
@@ -98,6 +97,11 @@ namespace OpenSim.Region.ClientStack.LindenUDP
     /// </summary>
     public class LLClientView : IClientAPI, IClientCore, IClientIM, IClientChat, IClientIPEndpoint, IStatsCollector
     {
+        /// <value>
+        /// Debug packet level.  At the moment, only 255 does anything (prints out all in and out packets).
+        /// </value>
+        protected int m_debugPacketLevel = 0;
+        
         #region Events
 
         public event GenericMessage OnGenericMessage;
@@ -122,7 +126,8 @@ namespace OpenSim.Region.ClientStack.LindenUDP
         public event ObjectAttach OnObjectAttach;
         public event ObjectDeselect OnObjectDetach;
         public event ObjectDrop OnObjectDrop;
-        public event GenericCall2 OnCompleteMovementToRegion;
+        public event GenericCall1 OnCompleteMovementToRegion;
+        public event UpdateAgent OnPreAgentUpdate;
         public event UpdateAgent OnAgentUpdate;
         public event AgentRequestSit OnAgentRequestSit;
         public event AgentSit OnAgentSit;
@@ -353,6 +358,7 @@ namespace OpenSim.Region.ClientStack.LindenUDP
         private bool m_SendLogoutPacketWhenClosing = true;
         private AgentUpdateArgs lastarg;
         private bool m_IsActive = true;
+        private bool m_IsLoggingOut = false;
 
         protected Dictionary<PacketType, PacketProcessor> m_packetHandlers = new Dictionary<PacketType, PacketProcessor>();
         protected Dictionary<string, GenericMessage> m_genericPacketHandlers = new Dictionary<string, GenericMessage>(); //PauPaw:Local Generic Message handlers
@@ -416,6 +422,12 @@ namespace OpenSim.Region.ClientStack.LindenUDP
             get { return m_IsActive; }
             set { m_IsActive = value; }
         }
+        public bool IsLoggingOut
+        {
+            get { return m_IsLoggingOut; }
+            set { m_IsLoggingOut = value; }
+        }
+
         public bool SendLogoutPacketWhenClosing { set { m_SendLogoutPacketWhenClosing = value; } }
 
         #endregion Properties
@@ -466,6 +478,7 @@ namespace OpenSim.Region.ClientStack.LindenUDP
 
         public void SetDebugPacketLevel(int newDebug)
         {
+            m_debugPacketLevel = newDebug;
         }
 
         #region Client Methods
@@ -2527,6 +2540,13 @@ namespace OpenSim.Region.ClientStack.LindenUDP
 
         public void SendAsset(AssetRequestToClient req)
         {
+            if (req.AssetInf.Data == null)
+            {
+                m_log.ErrorFormat("Cannot send asset {0} ({1}), asset data is null",
+                    req.AssetInf.ID, req.AssetInf.Metadata.ContentType);
+                return;
+            }
+
             //m_log.Debug("sending asset " + req.RequestAssetID);
             TransferInfoPacket Transfer = new TransferInfoPacket();
             Transfer.TransferInfo.ChannelType = 2;
@@ -4065,10 +4085,7 @@ namespace OpenSim.Region.ClientStack.LindenUDP
             EstateCovenantReplyPacket.DataBlock edata = new EstateCovenantReplyPacket.DataBlock();
             edata.CovenantID = covenant;
             edata.CovenantTimestamp = 0;
-            if (m_scene.RegionInfo.EstateSettings.EstateOwner != UUID.Zero)
-                edata.EstateOwnerID = m_scene.RegionInfo.EstateSettings.EstateOwner;
-            else
-                edata.EstateOwnerID = m_scene.RegionInfo.MasterAvatarAssignedUUID;
+            edata.EstateOwnerID = m_scene.RegionInfo.EstateSettings.EstateOwner;
             edata.EstateName = Utils.StringToBytes(m_scene.RegionInfo.EstateSettings.EstateName);
             einfopack.Data = edata;
             OutPacket(einfopack, ThrottleOutPacketType.Task);
@@ -4089,8 +4106,6 @@ namespace OpenSim.Region.ClientStack.LindenUDP
 
             //Sending Estate Settings
             returnblock[0].Parameter = Utils.StringToBytes(estateName);
-            // TODO: remove this cruft once MasterAvatar is fully deprecated
-            //
             returnblock[1].Parameter = Utils.StringToBytes(estateOwner.ToString());
             returnblock[2].Parameter = Utils.StringToBytes(estateID.ToString());
 
@@ -4879,7 +4894,10 @@ namespace OpenSim.Region.ClientStack.LindenUDP
                     UpdateAgent handlerAgentUpdate = OnAgentUpdate;
                     lastarg = arg; // save this set of arguments for nexttime
                     if (handlerAgentUpdate != null)
+                    {
+                        OnPreAgentUpdate(this, arg);
                         OnAgentUpdate(this, arg);
+                    }
 
                     handlerAgentUpdate = null;
                 }
@@ -5518,6 +5536,7 @@ namespace OpenSim.Region.ClientStack.LindenUDP
                 // for the client session anyway, in order to protect ourselves against bad code in plugins
                 try
                 {
+
                     byte[] visualparams = new byte[appear.VisualParam.Length];
                     for (int i = 0; i < appear.VisualParam.Length; i++)
                         visualparams[i] = appear.VisualParam[i].ParamValue;
@@ -5728,10 +5747,10 @@ namespace OpenSim.Region.ClientStack.LindenUDP
 
         private bool HandleCompleteAgentMovement(IClientAPI sender, Packet Pack)
         {
-            GenericCall2 handlerCompleteMovementToRegion = OnCompleteMovementToRegion;
+            GenericCall1 handlerCompleteMovementToRegion = OnCompleteMovementToRegion;
             if (handlerCompleteMovementToRegion != null)
             {
-                handlerCompleteMovementToRegion();
+                handlerCompleteMovementToRegion(sender);
             }
             handlerCompleteMovementToRegion = null;
 
@@ -5959,7 +5978,7 @@ namespace OpenSim.Region.ClientStack.LindenUDP
                     || avSetStartLocationRequestPacket.StartLocationData.LocationPos.Y == 255.5f)
                 {
                     ScenePresence avatar = null;
-                    if (((Scene)m_scene).TryGetAvatar(AgentId, out avatar))
+                    if (((Scene)m_scene).TryGetScenePresence(AgentId, out avatar))
                     {
                         if (avSetStartLocationRequestPacket.StartLocationData.LocationPos.X == 255.5f)
                         {
@@ -7051,7 +7070,9 @@ namespace OpenSim.Region.ClientStack.LindenUDP
                         assetRequestItem = invService.GetItem(assetRequestItem);
                         if (assetRequestItem == null)
                         {
-                            assetRequestItem = ((Scene)m_scene).CommsManager.UserProfileCacheService.LibraryRoot.FindItem(itemID);
+                            ILibraryService lib = m_scene.RequestModuleInterface<ILibraryService>();
+                            if (lib != null)
+                                assetRequestItem = lib.LibraryRootFolder.FindItem(itemID);
                             if (assetRequestItem == null)
                                 return true;
                         }
@@ -10941,7 +10962,7 @@ namespace OpenSim.Region.ClientStack.LindenUDP
             LLUDPServer.LogPacketHeader(false, m_circuitCode, 0, packet.Type, (ushort)packet.Length);
             #endregion BinaryStats
 
-            m_udpServer.SendPacket(m_udpClient, packet, throttlePacketType, true);
+            OutPacket(packet, throttlePacketType, true);
         }
 
         /// <summary>
@@ -10954,6 +10975,9 @@ namespace OpenSim.Region.ClientStack.LindenUDP
         /// handles splitting manually</param>
         protected void OutPacket(Packet packet, ThrottleOutPacketType throttlePacketType, bool doAutomaticSplitting)
         {
+            if (m_debugPacketLevel >= 255)
+                m_log.DebugFormat("[CLIENT]: Packet OUT {0}", packet.Type);
+            
             m_udpServer.SendPacket(m_udpClient, packet, throttlePacketType, doAutomaticSplitting);
         }
 
@@ -11025,10 +11049,11 @@ namespace OpenSim.Region.ClientStack.LindenUDP
         /// <param name="Pack">OpenMetaverse.packet</param>
         public void ProcessInPacket(Packet Pack)
         {
-//            m_log.DebugFormat("[CLIENT]: Packet IN {0}", Pack);
+            if (m_debugPacketLevel >= 255)
+                m_log.DebugFormat("[CLIENT]: Packet IN {0}", Pack.Type);
             
             if (!ProcessPacketMethod(Pack))
-                m_log.Warn("[CLIENT]: unhandled packet " + Pack);
+                m_log.Warn("[CLIENT]: unhandled packet " + Pack.Type);
 
             PacketPool.Instance.ReturnPacket(Pack);
         }
@@ -11346,6 +11371,9 @@ namespace OpenSim.Region.ClientStack.LindenUDP
             const uint m_maxPacketSize = 600;
             int numPackets = 1;
 
+            if (data == null)
+                return 0;
+
             if (data.LongLength > m_maxPacketSize)
             {
                 // over max number of bytes so split up file
@@ -11590,6 +11618,41 @@ namespace OpenSim.Region.ClientStack.LindenUDP
             packet.PropertiesData.SkillsText = Utils.StringToBytes(skillsText);
             packet.PropertiesData.LanguagesText = Utils.StringToBytes(languages);
             OutPacket(packet, ThrottleOutPacketType.Task);
+        }
+
+        public void SendChangeUserRights(UUID agentID, UUID friendID, int rights)
+        {
+            ChangeUserRightsPacket packet = (ChangeUserRightsPacket)PacketPool.Instance.GetPacket(PacketType.ChangeUserRights);
+
+            packet.AgentData = new ChangeUserRightsPacket.AgentDataBlock();
+            packet.AgentData.AgentID = agentID;
+
+            packet.Rights = new ChangeUserRightsPacket.RightsBlock[1];
+            packet.Rights[0] = new ChangeUserRightsPacket.RightsBlock();
+            packet.Rights[0].AgentRelated = friendID;
+            packet.Rights[0].RelatedRights = rights;
+
+            OutPacket(packet, ThrottleOutPacketType.Task);
+        }
+
+        public void SendTextBoxRequest(string message, int chatChannel, string objectname, string ownerFirstName, string ownerLastName, UUID objectId)
+        {
+            ScriptDialogPacket dialog = (ScriptDialogPacket)PacketPool.Instance.GetPacket(PacketType.ScriptDialog);
+            dialog.Data.ObjectID = objectId;
+            dialog.Data.ChatChannel = chatChannel;
+            dialog.Data.ImageID = UUID.Zero;
+            dialog.Data.ObjectName = Util.StringToBytes256(objectname);
+            // this is the username of the *owner*
+            dialog.Data.FirstName = Util.StringToBytes256(ownerFirstName);
+            dialog.Data.LastName = Util.StringToBytes256(ownerLastName);
+            dialog.Data.Message =  Util.StringToBytes256(message);
+            
+            
+            ScriptDialogPacket.ButtonsBlock[] buttons = new ScriptDialogPacket.ButtonsBlock[1];
+            buttons[0] = new ScriptDialogPacket.ButtonsBlock();
+            buttons[0].ButtonLabel = Util.StringToBytes256("!!llTextBox!!");
+            dialog.Buttons = buttons;
+            OutPacket(dialog, ThrottleOutPacketType.Task);
         }
     }
 }

@@ -104,7 +104,7 @@ namespace OpenSim.Region.CoreModules.World.Land
         /// <returns>Returns true if the piece of land contains the specified point</returns>
         public bool ContainsPoint(int x, int y)
         {
-            if (x >= 0 && y >= 0 && x <= Constants.RegionSize && x <= Constants.RegionSize)
+            if (x >= 0 && y >= 0 && x <= Constants.RegionSize && y <= Constants.RegionSize)
             {
                 return (LandBitmap[x / 4, y / 4] == true);
             }
@@ -286,7 +286,8 @@ namespace OpenSim.Region.CoreModules.World.Land
                 entry.AgentID = avatar;
                 entry.Flags = AccessList.Ban;
                 entry.Time = new DateTime();
-                if (LandData.ParcelAccessList.Contains(entry))
+                //See if they are on the list, but make sure the owner isn't banned
+                if (LandData.ParcelAccessList.Contains(entry) && LandData.OwnerID != avatar)
                 {
                     //They are banned, so lets send them a notice about this parcel
                     return true;
@@ -303,7 +304,9 @@ namespace OpenSim.Region.CoreModules.World.Land
                 entry.AgentID = avatar;
                 entry.Flags = AccessList.Access;
                 entry.Time = new DateTime();
-                if (!LandData.ParcelAccessList.Contains(entry))
+
+                //If they are not on the access list and are not the owner
+                if (!LandData.ParcelAccessList.Contains(entry) && LandData.OwnerID != avatar)
                 {
                     //They are not allowed in this parcel, but not banned, so lets send them a notice about this parcel
                     return true;
@@ -329,36 +332,38 @@ namespace OpenSim.Region.CoreModules.World.Land
 
         public void SendLandUpdateToAvatarsOverMe(bool snap_selection)
         {
-            List<ScenePresence> avatars = m_scene.GetAvatars();
-            ILandObject over = null;
-            for (int i = 0; i < avatars.Count; i++)
+            m_scene.ForEachScenePresence(delegate(ScenePresence avatar)
             {
+                if (avatar.IsChildAgent)
+                    return;
+
+                ILandObject over = null;
                 try
                 {
                     over =
-                        m_scene.LandChannel.GetLandObject(Util.Clamp<int>((int)Math.Round(avatars[i].AbsolutePosition.X), 0, ((int)Constants.RegionSize - 1)),
-                                                          Util.Clamp<int>((int)Math.Round(avatars[i].AbsolutePosition.Y), 0, ((int)Constants.RegionSize - 1)));
+                        m_scene.LandChannel.GetLandObject(Util.Clamp<int>((int)Math.Round(avatar.AbsolutePosition.X), 0, ((int)Constants.RegionSize - 1)),
+                                                          Util.Clamp<int>((int)Math.Round(avatar.AbsolutePosition.Y), 0, ((int)Constants.RegionSize - 1)));
                 }
                 catch (Exception)
                 {
-                    m_log.Warn("[LAND]: " + "unable to get land at x: " + Math.Round(avatars[i].AbsolutePosition.X) + " y: " +
-                               Math.Round(avatars[i].AbsolutePosition.Y));
+                    m_log.Warn("[LAND]: " + "unable to get land at x: " + Math.Round(avatar.AbsolutePosition.X) + " y: " +
+                               Math.Round(avatar.AbsolutePosition.Y));
                 }
 
                 if (over != null)
                 {
                     if (over.LandData.LocalID == LandData.LocalID)
                     {
-                        if (((over.LandData.Flags & (uint)ParcelFlags.AllowDamage) != 0) && 
+                        if (((over.LandData.Flags & (uint)ParcelFlags.AllowDamage) != 0) &&
                             m_scene.RegionInfo.RegionSettings.AllowDamage)
-                            avatars[i].Invulnerable = false;
+                            avatar.Invulnerable = false;
                         else
-                            avatars[i].Invulnerable = true;
+                            avatar.Invulnerable = true;
 
-                        SendLandUpdateToClient(snap_selection, avatars[i].ControllingClient);
+                        SendLandUpdateToClient(snap_selection, avatar.ControllingClient);
                     }
                 }
-            }
+            });
         }
 
         #endregion
@@ -889,7 +894,7 @@ namespace OpenSim.Region.CoreModules.World.Land
 
             foreach (List<SceneObjectGroup> ol in returns.Values)
             {
-                if (m_scene.Permissions.CanUseObjectReturn(this, type, remote_client, ol))
+                if (m_scene.Permissions.CanReturnObjects(this, remote_client.AgentId, ol))
                     m_scene.returnObjects(ol.ToArray(), remote_client.AgentId);
             }
         }

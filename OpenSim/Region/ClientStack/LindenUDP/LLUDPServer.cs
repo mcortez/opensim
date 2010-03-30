@@ -596,15 +596,14 @@ namespace OpenSim.Region.ClientStack.LindenUDP
             }
             catch (MalformedDataException)
             {
-                m_log.ErrorFormat("[LLUDPSERVER]: Malformed data, cannot parse packet from {0}:\n{1}",
-                    buffer.RemoteEndPoint, Utils.BytesToHexString(buffer.Data, buffer.DataLength, null));
             }
 
             // Fail-safe check
             if (packet == null)
             {
-                m_log.Warn("[LLUDPSERVER]: Couldn't build a message from incoming data " + buffer.DataLength +
-                    " bytes long from " + buffer.RemoteEndPoint);
+                m_log.ErrorFormat("[LLUDPSERVER]: Malformed data, cannot parse {0} byte packet from {1}:",
+                    buffer.DataLength, buffer.RemoteEndPoint);
+                m_log.Error(Utils.BytesToHexString(buffer.Data, buffer.DataLength, null));
                 return;
             }
 
@@ -919,7 +918,10 @@ namespace OpenSim.Region.ClientStack.LindenUDP
             // Remove this client from the scene
             IClientAPI client;
             if (m_scene.TryGetClient(udpClient.AgentID, out client))
+            {
+                client.IsLoggingOut = true;
                 client.Close();
+            }
         }
 
         private void IncomingPacketHandler()
@@ -1018,7 +1020,7 @@ namespace OpenSim.Region.ClientStack.LindenUDP
 
                     // Handle outgoing packets, resends, acknowledgements, and pings for each
                     // client. m_packetSent will be set to true if a packet is sent
-                    m_scene.ForEachClient(clientPacketHandler, false);
+                    m_scene.ForEachClient(clientPacketHandler);
 
                     // If nothing was sent, sleep for the minimum amount of time before a
                     // token bucket could get more tokens

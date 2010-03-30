@@ -285,31 +285,30 @@ namespace OpenSim.Region.CoreModules.Scripting.DynamicTexture
                     return;
                 }
 
-                byte[] assetData;
+                byte[] assetData = null;
                 AssetBase oldAsset = null;
                 
                 if (BlendWithOldTexture)
                 {
-                    UUID lastTextureID = part.Shape.Textures.DefaultTexture.TextureID;
-                    oldAsset = scene.AssetService.Get(lastTextureID.ToString());
-                    if (oldAsset != null)
+                    Primitive.TextureEntryFace defaultFace = part.Shape.Textures.DefaultTexture;
+                    if (defaultFace != null)
                     {
-                        assetData = BlendTextures(data, oldAsset.Data, SetNewFrontAlpha, FrontAlpha);
-                    }
-                    else
-                    {
-                        assetData = new byte[data.Length];
-                        Array.Copy(data, assetData, data.Length);
+                        oldAsset = scene.AssetService.Get(defaultFace.TextureID.ToString());
+
+                        if (oldAsset != null)
+                            assetData = BlendTextures(data, oldAsset.Data, SetNewFrontAlpha, FrontAlpha);
                     }
                 }
-                else
+
+                if (assetData == null)
                 {
                     assetData = new byte[data.Length];
                     Array.Copy(data, assetData, data.Length);
                 }
 
                 // Create a new asset for user
-                AssetBase asset = new AssetBase(UUID.Random(), "DynamicImage" + Util.RandomClass.Next(1, 10000), (sbyte)AssetType.Texture);
+                AssetBase asset = new AssetBase(UUID.Random(), "DynamicImage" + Util.RandomClass.Next(1, 10000), (sbyte)AssetType.Texture,
+                    scene.RegionInfo.RegionID.ToString());
                 asset.Data = assetData;
                 asset.Description = String.Format("URL image : {0}", Url);
                 asset.Local = false;

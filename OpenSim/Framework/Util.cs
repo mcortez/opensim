@@ -29,6 +29,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Data;
+using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.IO.Compression;
@@ -553,7 +554,7 @@ namespace OpenSim.Framework
             }
             catch (Exception e)
             {
-                m_log.ErrorFormat("[UTIL]: An error occurred while resolving {0}, {1}", dnsAddress, e);
+                m_log.WarnFormat("[UTIL]: An error occurred while resolving host name {0}, {1}", dnsAddress, e);
 
                 // Still going to throw the exception on for now, since this was what was happening in the first place
                 throw e;
@@ -1192,6 +1193,33 @@ namespace OpenSim.Framework
             return null;
         }
 
+        public static OSDMap GetOSDMap(string data)
+        {
+            OSDMap args = null;
+            try
+            {
+                OSD buffer;
+                // We should pay attention to the content-type, but let's assume we know it's Json
+                buffer = OSDParser.DeserializeJson(data);
+                if (buffer.Type == OSDType.Map)
+                {
+                    args = (OSDMap)buffer;
+                    return args;
+                }
+                else
+                {
+                    // uh?
+                    m_log.Debug(("[UTILS]: Got OSD of unexpected type " + buffer.Type.ToString()));
+                    return null;
+                }
+            }
+            catch (Exception ex)
+            {
+                m_log.Debug("[UTILS]: exception on GetOSDMap " + ex.Message);
+                return null;
+            }
+        }
+
         public static string[] Glob(string path)
         {
             string vol=String.Empty;
@@ -1416,6 +1444,7 @@ namespace OpenSim.Framework
         }
 
         #endregion FireAndForget Threading Pattern
+
         /// <summary>
         /// Environment.TickCount is an int but it counts all 32 bits so it goes positive
         /// and negative every 24.9 days. This trims down TickCount so it doesn't wrap
@@ -1440,5 +1469,21 @@ namespace OpenSim.Framework
             Int32 diff = EnvironmentTickCount() - prevValue;
             return (diff >= 0) ? diff : (diff + EnvironmentTickCountMask + 1);
         }
+
+        /// <summary>
+        /// Prints the call stack at any given point. Useful for debugging.
+        /// </summary>
+        public static void PrintCallStack()
+        {
+            StackTrace stackTrace = new StackTrace();           // get call stack
+            StackFrame[] stackFrames = stackTrace.GetFrames();  // get method calls (frames)
+
+            // write call stack method names
+            foreach (StackFrame stackFrame in stackFrames)
+            {
+                m_log.Debug(stackFrame.GetMethod().DeclaringType + "." + stackFrame.GetMethod().Name); // write method name
+            }
+        }
+
     }
 }

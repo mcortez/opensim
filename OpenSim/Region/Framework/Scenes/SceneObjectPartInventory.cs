@@ -34,7 +34,6 @@ using System.Reflection;
 using OpenMetaverse;
 using log4net;
 using OpenSim.Framework;
-using OpenSim.Framework.Communications.Cache;
 using OpenSim.Region.Framework.Interfaces;
 using OpenSim.Region.Framework.Scenes.Scripting;
 
@@ -638,7 +637,6 @@ namespace OpenSim.Region.Framework.Scenes
                     m_items[item.ItemID] = item;
                     m_inventorySerial++;
                     m_part.TriggerScriptChangedEvent(Changed.INVENTORY);
-
                     HasInventoryChanged = true;
                     m_part.ParentGroup.HasGroupChanged = true;
 

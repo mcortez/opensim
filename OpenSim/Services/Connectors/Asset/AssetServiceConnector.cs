@@ -68,7 +68,7 @@ namespace OpenSim.Services.Connectors
             IConfig assetConfig = source.Configs["AssetService"];
             if (assetConfig == null)
             {
-                m_log.Error("[ASSET CONNECTOR]: AssetService missing from OpanSim.ini");
+                m_log.Error("[ASSET CONNECTOR]: AssetService missing from OpenSim.ini");
                 throw new Exception("Asset connector init error");
             }
 
@@ -243,7 +243,7 @@ namespace OpenSim.Services.Connectors
                 if (metadata == null)
                     return false;
 
-                asset = new AssetBase(metadata.FullID, metadata.Name, metadata.Type);
+                asset = new AssetBase(metadata.FullID, metadata.Name, metadata.Type, UUID.Zero.ToString());
                 asset.Metadata = metadata;
             }
             asset.Data = data;

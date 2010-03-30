@@ -65,6 +65,11 @@ namespace OpenSim.Region.Framework.Scenes.Tests
             {
                 throw new NotImplementedException();
             }
+
+            public override bool TryGetScenePresence(UUID agentID, out ScenePresence scenePresence)
+            {
+                throw new NotImplementedException();
+            }
         }
 
         [Test]

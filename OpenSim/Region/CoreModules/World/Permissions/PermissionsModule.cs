@@ -32,7 +32,7 @@ using log4net;
 using Nini.Config;
 using OpenMetaverse;
 using OpenSim.Framework;
-using OpenSim.Framework.Communications.Cache;
+
 using OpenSim.Region.Framework.Interfaces;
 using OpenSim.Region.Framework.Scenes;
 using OpenSim.Services.Interfaces;
@@ -94,6 +94,23 @@ namespace OpenSim.Region.CoreModules.World.Permissions
         private static readonly ILog m_log = LogManager.GetLogger(MethodBase.GetCurrentMethod().DeclaringType);
                 
         protected Scene m_scene;
+
+        private InventoryFolderImpl m_libraryRootFolder;
+        protected InventoryFolderImpl LibraryRootFolder
+        {
+            get
+            {
+                if (m_libraryRootFolder != null)
+                    return m_libraryRootFolder;
+
+                ILibraryService lib = m_scene.RequestModuleInterface<ILibraryService>();
+                if (lib != null)
+                {
+                    m_libraryRootFolder = lib.LibraryRootFolder;
+                }
+                return m_libraryRootFolder;
+            }
+        }
 
         #region Constants
         // These are here for testing.  They will be taken out
@@ -200,7 +217,7 @@ namespace OpenSim.Region.CoreModules.World.Permissions
             m_scene.Permissions.OnIssueEstateCommand += CanIssueEstateCommand; //FULLY IMPLEMENTED
             m_scene.Permissions.OnMoveObject += CanMoveObject; //MAYBE FULLY IMPLEMENTED
             m_scene.Permissions.OnObjectEntry += CanObjectEntry;
-            m_scene.Permissions.OnReturnObject += CanReturnObject; //NOT YET IMPLEMENTED
+            m_scene.Permissions.OnReturnObjects += CanReturnObjects; //NOT YET IMPLEMENTED
             m_scene.Permissions.OnRezObject += CanRezObject; //MAYBE FULLY IMPLEMENTED
             m_scene.Permissions.OnRunConsoleCommand += CanRunConsoleCommand;
             m_scene.Permissions.OnRunScript += CanRunScript; //NOT YET IMPLEMENTED
@@ -230,7 +247,6 @@ namespace OpenSim.Region.CoreModules.World.Permissions
             m_scene.Permissions.OnDeleteUserInventory += CanDeleteUserInventory; //NOT YET IMPLEMENTED
             
             m_scene.Permissions.OnTeleport += CanTeleport; //NOT YET IMPLEMENTED
-            m_scene.Permissions.OnUseObjectReturn += CanUseObjectReturn; //NOT YET IMPLEMENTED
 
             m_scene.AddCommand(this, "bypass permissions",
                     "bypass permissions <true / false>",
@@ -462,12 +478,6 @@ namespace OpenSim.Region.CoreModules.World.Permissions
         {
             if (user == UUID.Zero) return false;
         
-            if (m_scene.RegionInfo.MasterAvatarAssignedUUID != UUID.Zero)
-            {
-                if (m_RegionOwnerIsGod && (m_scene.RegionInfo.MasterAvatarAssignedUUID == user))
-                    return true;
-            }
-            
             if (m_scene.RegionInfo.EstateSettings.EstateOwner != UUID.Zero)
             {
                 if (m_scene.RegionInfo.EstateSettings.EstateOwner == user && m_RegionOwnerIsGod)
@@ -479,10 +489,18 @@ namespace OpenSim.Region.CoreModules.World.Permissions
 
             if (m_allowGridGods)
             {
-                CachedUserInfo profile = m_scene.CommsManager.UserProfileCacheService.GetUserDetails(user);
-                if (profile != null && profile.UserProfile != null)
+                ScenePresence sp = m_scene.GetScenePresence(user);
+                if (sp != null)
                 {
-                    if (profile.UserProfile.GodLevel >= 200)
+                    if (sp.UserLevel >= 200)
+                        return true;
+                    return false;
+                }
+
+                UserAccount account = m_scene.UserAccountService.GetUserAccount(m_scene.RegionInfo.ScopeID, user);
+                if (account != null)
+                {
+                    if (account.UserLevel >= 200)
                         return true;
                 }
             }
@@ -499,13 +517,10 @@ namespace OpenSim.Region.CoreModules.World.Permissions
             if (m_friendsModule == null)
                 return false;
 
-            List<FriendListItem> profile = m_friendsModule.GetUserFriends(user);
+            uint friendPerms = m_friendsModule.GetFriendPerms(user, objectOwner);
+            if ((friendPerms & (uint)FriendRights.CanModifyObjects) != 0)
+                return true;
 
-            foreach (FriendListItem item in profile)
-            {
-                if (item.Friend == objectOwner && (item.FriendPerms & (uint)FriendRights.CanModifyObjects) != 0)
-                    return true;
-            }
             return false;
         }
 
@@ -601,16 +616,17 @@ namespace OpenSim.Region.CoreModules.World.Permissions
             if (IsFriendWithPerms(user, objectOwner))
                 return objectOwnerMask;
 
-            // Estate users should be able to edit anything in the sim
-            if (IsEstateManager(user) && m_RegionOwnerIsGod && (!IsAdministrator(objectOwner)) || objectOwner == user)
+            // Estate users should be able to edit anything in the sim if RegionOwnerIsGod is set
+            if (m_RegionOwnerIsGod && IsEstateManager(user) && !IsAdministrator(objectOwner))
                 return objectOwnerMask;
 
             // Admin should be able to edit anything in the sim (including admin objects)
             if (IsAdministrator(user))
                 return objectOwnerMask;
-        
+            
             // Users should be able to edit what is over their land.
-            ILandObject parcel = m_scene.LandChannel.GetLandObject(task.AbsolutePosition.X, task.AbsolutePosition.Y);
+            Vector3 taskPos = task.AbsolutePosition;
+            ILandObject parcel = m_scene.LandChannel.GetLandObject(taskPos.X, taskPos.Y);
             if (parcel != null && parcel.LandData.OwnerID == user && m_ParcelOwnerIsGod)
             {
                 // Admin objects should not be editable by the above
@@ -1011,9 +1027,9 @@ namespace OpenSim.Region.CoreModules.World.Permissions
                 IInventoryService invService = m_scene.InventoryService;
                 InventoryItemBase assetRequestItem = new InventoryItemBase(notecard, user);
                 assetRequestItem = invService.GetItem(assetRequestItem);
-                if (assetRequestItem == null) // Library item
+                if (assetRequestItem == null && LibraryRootFolder != null) // Library item
                 {
-                    assetRequestItem = scene.CommsManager.UserProfileCacheService.LibraryRoot.FindItem(notecard);
+                    assetRequestItem = LibraryRootFolder.FindItem(notecard);
 
                     if (assetRequestItem != null) // Implicitly readable
                         return true;
@@ -1258,12 +1274,106 @@ namespace OpenSim.Region.CoreModules.World.Permissions
             return false;
         }
 
-        private bool CanReturnObject(UUID objectID, UUID returnerID, Scene scene)
+        private bool CanReturnObjects(ILandObject land, UUID user, List<SceneObjectGroup> objects, Scene scene)
         {
             DebugPermissionInformation(MethodInfo.GetCurrentMethod().Name);
             if (m_bypassPermissions) return m_bypassPermissionsValue;
 
-            return GenericObjectPermission(returnerID, objectID, false);
+            GroupPowers powers;
+            ILandObject l;
+
+            ScenePresence sp = scene.GetScenePresence(user);
+            if (sp == null)
+                return false;
+
+            IClientAPI client = sp.ControllingClient;
+
+            foreach (SceneObjectGroup g in new List<SceneObjectGroup>(objects))
+            {
+                // Any user can return their own objects at any time
+                //
+                if (GenericObjectPermission(user, g.UUID, false))
+                    continue;
+
+                // This is a short cut for efficiency. If land is non-null,
+                // then all objects are on that parcel and we can save
+                // ourselves the checking for each prim. Much faster.
+                //
+                if (land != null)
+                {
+                    l = land;
+                }
+                else
+                {
+                    Vector3 pos = g.AbsolutePosition;
+
+                    l = scene.LandChannel.GetLandObject(pos.X, pos.Y);
+                }
+
+                // If it's not over any land, then we can't do a thing
+                if (l == null)
+                {
+                    objects.Remove(g);
+                    continue;
+                }
+
+                // If we own the land outright, then allow
+                //
+                if (l.LandData.OwnerID == user)
+                    continue;
+
+                // Group voodoo
+                //
+                if (l.LandData.IsGroupOwned)
+                {
+                    powers = (GroupPowers)client.GetGroupPowers(l.LandData.GroupID);
+                    // Not a group member, or no rights at all
+                    //
+                    if (powers == (GroupPowers)0)
+                    {
+                        objects.Remove(g);
+                        continue;
+                    }
+
+                    // Group deeded object?
+                    //
+                    if (g.OwnerID == l.LandData.GroupID &&
+                        (powers & GroupPowers.ReturnGroupOwned) == (GroupPowers)0)
+                    {
+                        objects.Remove(g);
+                        continue;
+                    }
+
+                    // Group set object?
+                    //
+                    if (g.GroupID == l.LandData.GroupID &&
+                        (powers & GroupPowers.ReturnGroupSet) == (GroupPowers)0)
+                    {
+                        objects.Remove(g);
+                        continue;
+                    }
+
+                    if ((powers & GroupPowers.ReturnNonGroup) == (GroupPowers)0)
+                    {
+                        objects.Remove(g);
+                        continue;
+                    }
+
+                    // So we can remove all objects from this group land.
+                    // Fine.
+                    //
+                    continue;
+                }
+
+                // By default, we can't remove
+                //
+                objects.Remove(g);
+            }
+
+            if (objects.Count == 0)
+                return false;
+
+            return true;
         }
 
         private bool CanRezObject(int objectCount, UUID owner, Vector3 objectPosition, Scene scene)
@@ -1431,9 +1541,9 @@ namespace OpenSim.Region.CoreModules.World.Permissions
                 IInventoryService invService = m_scene.InventoryService;
                 InventoryItemBase assetRequestItem = new InventoryItemBase(script, user);
                 assetRequestItem = invService.GetItem(assetRequestItem);
-                if (assetRequestItem == null) // Library item
+                if (assetRequestItem == null && LibraryRootFolder != null) // Library item
                 {
-                    assetRequestItem = m_scene.CommsManager.UserProfileCacheService.LibraryRoot.FindItem(script);
+                    assetRequestItem = LibraryRootFolder.FindItem(script);
 
                     if (assetRequestItem != null) // Implicitly readable
                         return true;
@@ -1526,9 +1636,9 @@ namespace OpenSim.Region.CoreModules.World.Permissions
                 IInventoryService invService = m_scene.InventoryService;
                 InventoryItemBase assetRequestItem = new InventoryItemBase(notecard, user);
                 assetRequestItem = invService.GetItem(assetRequestItem);
-                if (assetRequestItem == null) // Library item
+                if (assetRequestItem == null && LibraryRootFolder != null) // Library item
                 {
-                    assetRequestItem = m_scene.CommsManager.UserProfileCacheService.LibraryRoot.FindItem(notecard);
+                    assetRequestItem = LibraryRootFolder.FindItem(notecard);
 
                     if (assetRequestItem != null) // Implicitly readable
                         return true;
@@ -1730,67 +1840,6 @@ namespace OpenSim.Region.CoreModules.World.Permissions
             return GenericObjectPermission(agentID, prim, false);
         }
 
-        private bool CanUseObjectReturn(ILandObject parcel, uint type, IClientAPI client, List<SceneObjectGroup> retlist, Scene scene)
-        {
-            DebugPermissionInformation(MethodInfo.GetCurrentMethod().Name);
-            if (m_bypassPermissions) return m_bypassPermissionsValue;
-
-            long powers = 0;
-            if (parcel.LandData.GroupID != UUID.Zero)
-                client.GetGroupPowers(parcel.LandData.GroupID);
-
-            switch (type)
-            {
-            case (uint)ObjectReturnType.Owner:
-                // Don't let group members return owner's objects, ever
-                //
-                if (parcel.LandData.IsGroupOwned)
-                {
-                    if ((powers & (long)GroupPowers.ReturnGroupOwned) != 0)
-                        return true;
-                }
-                else
-                {
-                    if (parcel.LandData.OwnerID != client.AgentId)
-                        return false;
-                }
-        return GenericParcelOwnerPermission(client.AgentId, parcel, (ulong)GroupPowers.ReturnGroupOwned);
-            case (uint)ObjectReturnType.Group:
-                if (parcel.LandData.OwnerID != client.AgentId)
-                {
-                    // If permissionis granted through a group...
-                    //
-                    if ((powers & (long)GroupPowers.ReturnGroupSet) != 0)
-                    {
-                        foreach (SceneObjectGroup g in new List<SceneObjectGroup>(retlist))
-                        {
-                            // check for and remove group owned objects unless
-                            // the user also has permissions to return those
-                            //
-                            if (g.OwnerID == g.GroupID &&
-                                    ((powers & (long)GroupPowers.ReturnGroupOwned) == 0))
-                            {
-                                retlist.Remove(g);
-                            }
-                        }
-                        // And allow the operation
-                        //
-                        return true;
-                    }
-                }
-                return GenericParcelOwnerPermission(client.AgentId, parcel, (ulong)GroupPowers.ReturnGroupSet);
-            case (uint)ObjectReturnType.Other:
-                if ((powers & (long)GroupPowers.ReturnNonGroup) != 0)
-                    return true;
-                return GenericParcelOwnerPermission(client.AgentId, parcel, (ulong)GroupPowers.ReturnNonGroup);
-            case (uint)ObjectReturnType.List:
-                break;
-            }
-
-            return GenericParcelOwnerPermission(client.AgentId, parcel, 0);
-        // Is it correct to be less restrictive for lists of objects to be returned?
-        }
-        
         private bool CanCompileScript(UUID ownerUUID, int scriptType, Scene scene) {
              //m_log.DebugFormat("check if {0} is allowed to compile {1}", ownerUUID, scriptType);
             switch (scriptType) {

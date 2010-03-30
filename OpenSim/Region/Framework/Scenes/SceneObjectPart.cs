@@ -568,8 +568,8 @@ namespace OpenSim.Region.Framework.Scenes
         private List<SceneObjectPart> m_PlaySoundSlavePrims = new List<SceneObjectPart>();
         public List<SceneObjectPart> PlaySoundSlavePrims
         {
-            get { return m_LoopSoundSlavePrims; }
-            set { m_LoopSoundSlavePrims = value; }
+            get { return m_PlaySoundSlavePrims; }
+            set { m_PlaySoundSlavePrims = value; }
         }
 
         private SceneObjectPart m_LoopSoundMasterPrim = null;
@@ -680,7 +680,7 @@ namespace OpenSim.Region.Framework.Scenes
                     if (m_parentGroup != null) // TODO can there be a SOP without a SOG?
                     {
                         ScenePresence avatar;
-                        if (m_parentGroup.Scene.TryGetAvatar(m_sitTargetAvatar, out avatar))
+                        if (m_parentGroup.Scene.TryGetScenePresence(m_sitTargetAvatar, out avatar))
                         {
                             avatar.ParentPosition = GetWorldPosition();
                         }
@@ -1197,15 +1197,14 @@ namespace OpenSim.Region.Framework.Scenes
 
         private void SendObjectPropertiesToClient(UUID AgentID)
         {
-            ScenePresence[] avatars = m_parentGroup.Scene.GetScenePresences();
-            for (int i = 0; i < avatars.Length; i++)
+            m_parentGroup.Scene.ForEachScenePresence(delegate(ScenePresence avatar)
             {
                 // Ugly reference :(
-                if (avatars[i].UUID == AgentID)
+                if (avatar.UUID == AgentID)
                 {
-                    m_parentGroup.GetProperties(avatars[i].ControllingClient);
+                    m_parentGroup.GetProperties(avatar.ControllingClient);
                 }
-            }
+            });
         }
 
         // TODO: unused:
@@ -1260,11 +1259,10 @@ namespace OpenSim.Region.Framework.Scenes
         /// </summary>
         public void AddFullUpdateToAllAvatars()
         {
-            ScenePresence[] avatars = m_parentGroup.Scene.GetScenePresences();
-            for (int i = 0; i < avatars.Length; i++)
+            m_parentGroup.Scene.ForEachScenePresence(delegate(ScenePresence avatar)
             {
-                avatars[i].SceneViewer.QueuePartForUpdate(this);
-            }
+                avatar.SceneViewer.QueuePartForUpdate(this);
+            });
         }
 
         public void AddFullUpdateToAvatar(ScenePresence presence)
@@ -1285,11 +1283,10 @@ namespace OpenSim.Region.Framework.Scenes
         /// Terse updates
         public void AddTerseUpdateToAllAvatars()
         {
-            ScenePresence[] avatars = m_parentGroup.Scene.GetScenePresences();
-            for (int i = 0; i < avatars.Length; i++)
+            m_parentGroup.Scene.ForEachScenePresence(delegate(ScenePresence avatar)
             {
-                avatars[i].SceneViewer.QueuePartForUpdate(this);
-            }
+                avatar.SceneViewer.QueuePartForUpdate(this);
+            });
         }
 
         public void AddTerseUpdateToAvatar(ScenePresence presence)
@@ -1324,11 +1321,11 @@ namespace OpenSim.Region.Framework.Scenes
             if (volume < 0)
                 volume = 0;
 
-            List<ScenePresence> avatarts = m_parentGroup.Scene.GetAvatars();
-            foreach (ScenePresence p in avatarts)
+            m_parentGroup.Scene.ForEachScenePresence(delegate(ScenePresence sp)
             {
-                p.ControllingClient.SendAttachedSoundGainChange(UUID, (float)volume);
-            }
+                if(!sp.IsChildAgent)
+                    sp.ControllingClient.SendAttachedSoundGainChange(UUID, (float)volume);
+            });
         }
 
         /// <summary>
@@ -2044,6 +2041,7 @@ namespace OpenSim.Region.Framework.Scenes
             {
                 m_lastColliders.Remove(localID);
             }
+
             if (m_parentGroup == null)
                 return;
             if (m_parentGroup.IsDeleted)
@@ -2120,17 +2118,13 @@ namespace OpenSim.Region.Framework.Scenes
                         }
                         else
                         {
-                            ScenePresence[] avlist = m_parentGroup.Scene.GetScenePresences();
-
-                            for (int i = 0; i < avlist.Length; i++)
+                            m_parentGroup.Scene.ForEachScenePresence(delegate(ScenePresence av)
                             {
-                                ScenePresence av = avlist[i];
-
                                 if (av.LocalId == localId)
                                 {
                                     if (m_parentGroup.RootPart.CollisionFilter.ContainsValue(av.UUID.ToString()) || m_parentGroup.RootPart.CollisionFilter.ContainsValue(av.Name))
                                     {
-                                        bool found = m_parentGroup.RootPart.CollisionFilter.TryGetValue(1,out data);
+                                        bool found = m_parentGroup.RootPart.CollisionFilter.TryGetValue(1, out data);
                                         //If it is 1, it is to accept ONLY collisions from this avatar
                                         if (found)
                                         {
@@ -2152,7 +2146,7 @@ namespace OpenSim.Region.Framework.Scenes
                                     }
                                     else
                                     {
-                                        bool found = m_parentGroup.RootPart.CollisionFilter.TryGetValue(1,out data);
+                                        bool found = m_parentGroup.RootPart.CollisionFilter.TryGetValue(1, out data);
                                         //If it is 1, it is to accept ONLY collisions from this avatar, so this other avatar will not work
                                         if (!found)
                                         {
@@ -2170,7 +2164,7 @@ namespace OpenSim.Region.Framework.Scenes
                                     }
 
                                 }
-                            }
+                            });
                         }
                     }
                     if (colliding.Count > 0)
@@ -2256,17 +2250,13 @@ namespace OpenSim.Region.Framework.Scenes
                         }
                         else
                         {
-                            ScenePresence[] avlist = m_parentGroup.Scene.GetScenePresences();
-
-                            for (int i = 0; i < avlist.Length; i++)
+                            m_parentGroup.Scene.ForEachScenePresence(delegate(ScenePresence av)
                             {
-                                ScenePresence av = avlist[i];
-
                                 if (av.LocalId == localId)
                                 {
                                     if (m_parentGroup.RootPart.CollisionFilter.ContainsValue(av.UUID.ToString()) || m_parentGroup.RootPart.CollisionFilter.ContainsValue(av.Name))
                                     {
-                                        bool found = m_parentGroup.RootPart.CollisionFilter.TryGetValue(1,out data);
+                                        bool found = m_parentGroup.RootPart.CollisionFilter.TryGetValue(1, out data);
                                         //If it is 1, it is to accept ONLY collisions from this avatar
                                         if (found)
                                         {
@@ -2288,7 +2278,7 @@ namespace OpenSim.Region.Framework.Scenes
                                     }
                                     else
                                     {
-                                        bool found = m_parentGroup.RootPart.CollisionFilter.TryGetValue(1,out data);
+                                        bool found = m_parentGroup.RootPart.CollisionFilter.TryGetValue(1, out data);
                                         //If it is 1, it is to accept ONLY collisions from this avatar, so this other avatar will not work
                                         if (!found)
                                         {
@@ -2306,7 +2296,7 @@ namespace OpenSim.Region.Framework.Scenes
                                     }
 
                                 }
-                            }
+                            });
                         }
                     }
                     if (colliding.Count > 0)
@@ -2387,17 +2377,13 @@ namespace OpenSim.Region.Framework.Scenes
                         }
                         else
                         {
-                            ScenePresence[] avlist = m_parentGroup.Scene.GetScenePresences();
-
-                            for (int i = 0; i < avlist.Length; i++)
+                            m_parentGroup.Scene.ForEachScenePresence(delegate(ScenePresence av)
                             {
-                                ScenePresence av = avlist[i];
-
                                 if (av.LocalId == localId)
                                 {
                                     if (m_parentGroup.RootPart.CollisionFilter.ContainsValue(av.UUID.ToString()) || m_parentGroup.RootPart.CollisionFilter.ContainsValue(av.Name))
                                     {
-                                        bool found = m_parentGroup.RootPart.CollisionFilter.TryGetValue(1,out data);
+                                        bool found = m_parentGroup.RootPart.CollisionFilter.TryGetValue(1, out data);
                                         //If it is 1, it is to accept ONLY collisions from this avatar
                                         if (found)
                                         {
@@ -2419,7 +2405,7 @@ namespace OpenSim.Region.Framework.Scenes
                                     }
                                     else
                                     {
-                                        bool found = m_parentGroup.RootPart.CollisionFilter.TryGetValue(1,out data);
+                                        bool found = m_parentGroup.RootPart.CollisionFilter.TryGetValue(1, out data);
                                         //If it is 1, it is to accept ONLY collisions from this avatar, so this other avatar will not work
                                         if (!found)
                                         {
@@ -2437,7 +2423,7 @@ namespace OpenSim.Region.Framework.Scenes
                                     }
 
                                 }
-                            }
+                            });
                         }
                     }
                     
@@ -2623,12 +2609,13 @@ namespace OpenSim.Region.Framework.Scenes
                 }
             }
 
-            List<ScenePresence> avatarts = m_parentGroup.Scene.GetAvatars();
-            foreach (ScenePresence p in avatarts)
+            m_parentGroup.Scene.ForEachScenePresence(delegate(ScenePresence sp)
             {
-                if (!(Util.GetDistanceTo(p.AbsolutePosition, AbsolutePosition) >= 100))
-                    p.ControllingClient.SendPreLoadSound(objectID, objectID, soundID);
-            }
+                if (sp.IsChildAgent)
+                    return;
+                if (!(Util.GetDistanceTo(sp.AbsolutePosition, AbsolutePosition) >= 100))
+                    sp.ControllingClient.SendPreLoadSound(objectID, objectID, soundID);
+            });
         }
 
         public void RemFlag(PrimFlags flag)
@@ -2834,41 +2821,66 @@ namespace OpenSim.Region.Framework.Scenes
             }
         }
 
+//        /// <summary>
+//        ///
+//        /// </summary>
+//        /// <param name="remoteClient"></param>
+//        public void SendFullUpdate(IClientAPI remoteClient, uint clientFlags)
+//        {
+//            m_parentGroup.SendPartFullUpdate(remoteClient, this, clientFlags);
+//        }
+
+
         /// <summary>
-        ///
+        /// Send a full update to the client for the given part
         /// </summary>
         /// <param name="remoteClient"></param>
-        public void SendFullUpdate(IClientAPI remoteClient, uint clientFlags)
+        /// <param name="clientFlags"></param>
+        protected internal void SendFullUpdate(IClientAPI remoteClient, uint clientFlags)
         {
-            m_parentGroup.SendPartFullUpdate(remoteClient, this, clientFlags);
+//            m_log.DebugFormat(
+//                "[SOG]: Sendinging part full update to {0} for {1} {2}", remoteClient.Name, part.Name, part.LocalId);
+            
+            if (IsRoot)
+            {
+                if (IsAttachment)
+                {
+                    SendFullUpdateToClient(remoteClient, AttachedPos, clientFlags);
+                }
+                else
+                {
+                    SendFullUpdateToClient(remoteClient, AbsolutePosition, clientFlags);
+                }
+            }
+            else
+            {
+                SendFullUpdateToClient(remoteClient, clientFlags);
+            }
         }
 
         /// <summary>
-        ///
+        /// Send a full update for this part to all clients.
         /// </summary>
         public void SendFullUpdateToAllClients()
         {
-            ScenePresence[] avatars = m_parentGroup.Scene.GetScenePresences();
-            for (int i = 0; i < avatars.Length; i++)
+            m_parentGroup.Scene.ForEachScenePresence(delegate(ScenePresence avatar)
             {
-                // Ugly reference :(
-                m_parentGroup.SendPartFullUpdate(avatars[i].ControllingClient, this,
-                                                 avatars[i].GenerateClientFlags(UUID));
-            }
+                SendFullUpdate(avatar.ControllingClient, avatar.GenerateClientFlags(UUID));
+            });
         }
 
+        /// <summary>
+        /// Send a full update to all clients except the one nominated.
+        /// </summary>
+        /// <param name="agentID"></param>
         public void SendFullUpdateToAllClientsExcept(UUID agentID)
         {
-            ScenePresence[] avatars = m_parentGroup.Scene.GetScenePresences();
-            for (int i = 0; i < avatars.Length; i++)
+            m_parentGroup.Scene.ForEachScenePresence(delegate(ScenePresence avatar)
             {
                 // Ugly reference :(
-                if (avatars[i].UUID != agentID)
-                {
-                    m_parentGroup.SendPartFullUpdate(avatars[i].ControllingClient, this,
-                                                    avatars[i].GenerateClientFlags(UUID));
-                }
-            }
+                if (avatar.UUID != agentID)
+                    SendFullUpdate(avatar.ControllingClient, avatar.GenerateClientFlags(UUID));
+            });
         }
 
         /// <summary>
@@ -3068,11 +3080,10 @@ namespace OpenSim.Region.Framework.Scenes
         /// </summary>
         public void SendTerseUpdateToAllClients()
         {
-            ScenePresence[] avatars = m_parentGroup.Scene.GetScenePresences();
-            for (int i = 0; i < avatars.Length; i++)
+            m_parentGroup.Scene.ForEachScenePresence(delegate(ScenePresence avatar)
             {
-                SendTerseUpdateToClient(avatars[i].ControllingClient);
-            }
+                SendTerseUpdateToClient(avatar.ControllingClient);
+            });
         }
 
         public void SetAttachmentPoint(uint AttachmentPoint)
@@ -4679,6 +4690,11 @@ namespace OpenSim.Region.Framework.Scenes
             {
                 m_log.Error("[Physics] " + ex);
             }
+        }
+
+        public Color4 GetTextColor()
+        {
+            return new Color4((byte)Color.R, (byte)Color.G, (byte)Color.B, (byte)(0xFF - Color.A));
         }
     }
 }

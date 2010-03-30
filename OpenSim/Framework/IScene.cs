@@ -66,6 +66,8 @@ namespace OpenSim.Framework
 
         float TimeDilation { get; }
 
+        bool AllowScriptCrossings { get; }
+
         event restart OnRestart;
 
         void AddNewClient(IClientAPI client);
@@ -89,6 +91,8 @@ namespace OpenSim.Framework
         /// </exception>
         bool PresenceChildStatus(UUID agentId);
 
+        bool TryGetScenePresence(UUID agentID, out object scenePresence);
+
         T RequestModuleInterface<T>();
         T[] RequestModuleInterfaces<T>();
 
@@ -96,5 +100,7 @@ namespace OpenSim.Framework
         void StackModuleInterface<M>(M mod);
 
         void AddCommand(object module, string command, string shorthelp, string longhelp, CommandDelegate callback);
+
+        ISceneObject DeserializeObject(string representation);
     }
 }

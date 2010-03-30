@@ -122,8 +122,7 @@ namespace OpenSim
             m_log.Info("====================================================================");
             m_log.Info("========================= STARTING OPENSIM =========================");
             m_log.Info("====================================================================");
-            m_log.InfoFormat("[OPENSIM MAIN]: Running in {0} mode",
-                             (ConfigurationSettings.Standalone ? "sandbox" : "grid"));
+            m_log.InfoFormat("[OPENSIM MAIN]: Running ");
             //m_log.InfoFormat("[OPENSIM MAIN]: GC Is Server GC: {0}", GCSettings.IsServerGC.ToString());
             // http://msdn.microsoft.com/en-us/library/bb384202.aspx
             //GCSettings.LatencyMode = GCLatencyMode.Batch;
@@ -153,6 +152,11 @@ namespace OpenSim
             RegisterConsoleCommands();
 
             base.StartupSpecific();
+            
+            MainServer.Instance.AddStreamHandler(new OpenSim.SimStatusHandler());
+            MainServer.Instance.AddStreamHandler(new OpenSim.XSimStatusHandler(this));
+            if (userStatsURI != String.Empty)
+                MainServer.Instance.AddStreamHandler(new OpenSim.UXSimStatusHandler(this));
 
             if (m_console is RemoteConsole)
             {
@@ -350,25 +354,6 @@ namespace OpenSim
                                           "kill uuid <UUID>",
                                           "Kill an object by UUID", KillUUID);
 
-            if (ConfigurationSettings.Standalone)
-            {
-                m_console.Commands.AddCommand("region", false, "create user",
-                                              "create user [<first> [<last> [<pass> [<x> <y> [<email>]]]]]",
-                                              "Create a new user", HandleCreateUser);
-
-                m_console.Commands.AddCommand("region", false, "reset user password",
-                                              "reset user password [<first> [<last> [<password>]]]",
-                                              "Reset a user password", HandleResetUserPassword);
-            }
-
-            m_console.Commands.AddCommand("hypergrid", false, "link-mapping", "link-mapping [<x> <y>] <cr>",
-                                          "Set local coordinate to map HG regions to", RunCommand);
-            m_console.Commands.AddCommand("hypergrid", false, "link-region",
-                                          "link-region <Xloc> <Yloc> <HostName>:<HttpPort>[:<RemoteRegionName>] <cr>",
-                                          "Link a hypergrid region", RunCommand);
-            m_console.Commands.AddCommand("hypergrid", false, "unlink-region",
-                                          "unlink-region <local name> or <HostName>:<HttpPort> <cr>",
-                                          "Unlink a hypergrid region", RunCommand);
         }
 
         public override void ShutdownSpecific()
@@ -421,7 +406,7 @@ namespace OpenSim
 
             foreach (ScenePresence presence in agents)
             {
-                RegionInfo regionInfo = m_sceneManager.GetRegionInfo(presence.RegionHandle);
+                RegionInfo regionInfo = presence.Scene.RegionInfo;
 
                 if (presence.Firstname.ToLower().Contains(cmdparams[2].ToLower()) &&
                     presence.Lastname.ToLower().Contains(cmdparams[3].ToLower()))
@@ -777,38 +762,6 @@ namespace OpenSim
         }
 
         /// <summary>
-        /// Execute switch for some of the create commands
-        /// </summary>
-        /// <param name="args"></param>
-        private void HandleCreateUser(string module, string[] cmd)
-        {
-            if (ConfigurationSettings.Standalone)
-            {
-                CreateUser(cmd);
-            }
-            else
-            {
-                MainConsole.Instance.Output("Create user is not available in grid mode, use the user server.");
-            }
-        }
-
-        /// <summary>
-        /// Execute switch for some of the reset commands
-        /// </summary>
-        /// <param name="args"></param>
-        protected void HandleResetUserPassword(string module, string[] cmd)
-        {
-            if (ConfigurationSettings.Standalone)
-            {
-                ResetUserPassword(cmd);
-            }
-            else
-            {
-                MainConsole.Instance.Output("Reset user password is not available in grid mode, use the user-server.");
-            }
-        }
-
-        /// <summary>
         /// Turn on some debugging values for OpenSim.
         /// </summary>
         /// <param name="args"></param>
@@ -908,7 +861,7 @@ namespace OpenSim
 
                     foreach (ScenePresence presence in agents)
                     {
-                        RegionInfo regionInfo = m_sceneManager.GetRegionInfo(presence.RegionHandle);
+                        RegionInfo regionInfo = presence.Scene.RegionInfo;
                         string regionName;
 
                         if (regionInfo == null)
@@ -944,7 +897,7 @@ namespace OpenSim
                                 {
                                     connections.AppendFormat("{0}: {1} ({2}) from {3} on circuit {4}\n",
                                         scene.RegionInfo.RegionName, client.Name, client.AgentId, client.RemoteEndPoint, client.CircuitCode);
-                                }, false
+                                }
                             );
                         }
                     );
@@ -1043,86 +996,6 @@ namespace OpenSim
                                             });
 
             return report;
-        }
-
-        /// <summary>
-        /// Create a new user
-        /// </summary>
-        /// <param name="cmdparams">string array with parameters: firstname, lastname, password, locationX, locationY, email</param>
-        protected void CreateUser(string[] cmdparams)
-        {
-            string firstName;
-            string lastName;
-            string password;
-            string email;
-            uint regX = 1000;
-            uint regY = 1000;
-
-            IConfig standalone;
-            if ((standalone = m_config.Source.Configs["StandAlone"]) != null)
-            {
-                regX = (uint)standalone.GetInt("default_location_x", (int)regX);
-                regY = (uint)standalone.GetInt("default_location_y", (int)regY);
-            }
-
-
-            if (cmdparams.Length < 3)
-                firstName = MainConsole.Instance.CmdPrompt("First name", "Default");
-            else firstName = cmdparams[2];
-
-            if (cmdparams.Length < 4)
-                lastName = MainConsole.Instance.CmdPrompt("Last name", "User");
-            else lastName = cmdparams[3];
-
-            if (cmdparams.Length < 5)
-                password = MainConsole.Instance.PasswdPrompt("Password");
-            else password = cmdparams[4];
-
-            if (cmdparams.Length < 6)
-                regX = Convert.ToUInt32(MainConsole.Instance.CmdPrompt("Start Region X", regX.ToString()));
-            else regX = Convert.ToUInt32(cmdparams[5]);
-
-            if (cmdparams.Length < 7)
-                regY = Convert.ToUInt32(MainConsole.Instance.CmdPrompt("Start Region Y", regY.ToString()));
-            else regY = Convert.ToUInt32(cmdparams[6]);
-
-            if (cmdparams.Length < 8)
-                email = MainConsole.Instance.CmdPrompt("Email", "");
-            else email = cmdparams[7];
-
-            if (null == m_commsManager.UserProfileCacheService.GetUserDetails(firstName, lastName))
-            {
-                m_commsManager.UserAdminService.AddUser(firstName, lastName, password, email, regX, regY);
-            }
-            else
-            {
-                MainConsole.Instance.Output(string.Format("A user with the name {0} {1} already exists!", firstName, lastName));
-            }
-        }
-
-        /// <summary>
-        /// Reset a user password.
-        /// </summary>
-        /// <param name="cmdparams"></param>
-        private void ResetUserPassword(string[] cmdparams)
-        {
-            string firstName;
-            string lastName;
-            string newPassword;
-
-            if (cmdparams.Length < 4)
-                firstName = MainConsole.Instance.CmdPrompt("First name");
-            else firstName = cmdparams[3];
-
-            if (cmdparams.Length < 5)
-                lastName = MainConsole.Instance.CmdPrompt("Last name");
-            else lastName = cmdparams[4];
-
-            if (cmdparams.Length < 6)
-                newPassword = MainConsole.Instance.PasswdPrompt("New password");
-            else newPassword = cmdparams[5];
-
-            m_commsManager.UserAdminService.ResetUserPassword(firstName, lastName, newPassword);
         }
 
         /// <summary>

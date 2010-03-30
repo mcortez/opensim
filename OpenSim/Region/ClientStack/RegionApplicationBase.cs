@@ -56,13 +56,6 @@ namespace OpenSim.Region.ClientStack
 
         protected uint m_httpServerPort;
         
-        public CommunicationsManager CommunicationsManager 
-        {
-            get { return m_commsManager; }
-            set { m_commsManager = value; }
-        }
-        protected CommunicationsManager m_commsManager;
-
         protected StorageManager m_storageManager;
         
         protected ClientStackManager m_clientStackManager;
@@ -105,11 +98,13 @@ namespace OpenSim.Region.ClientStack
             
             if (m_networkServersInfo.HttpUsesSSL && (m_networkServersInfo.HttpListenerPort == m_networkServersInfo.httpSSLPort))
             {
-                m_log.Error("[HTTP]: HTTP Server config failed.   HTTP Server and HTTPS server must be on different ports");
+                m_log.Error("[REGION SERVER]: HTTP Server config failed.   HTTP Server and HTTPS server must be on different ports");
             }
 
-            m_log.Info("[REGION]: Starting HTTP server");
+            m_log.InfoFormat("[REGION SERVER]: Starting HTTP server on port {0}", m_httpServerPort);
             m_httpServer.Start();
+
+            MainServer.Instance = m_httpServer;
 
             base.StartupSpecific();
         }

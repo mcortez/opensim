@@ -38,7 +38,7 @@ using OpenMetaverse;
 using OpenMetaverse.Packets;
 using OpenSim;
 using OpenSim.Framework;
-using OpenSim.Framework.Communications.Cache;
+
 using OpenSim.Region.CoreModules;
 using OpenSim.Region.CoreModules.World.Land;
 using OpenSim.Region.CoreModules.World.Terrain;
@@ -52,9 +52,9 @@ using OpenSim.Region.ScriptEngine.Shared.ScriptBase;
 using OpenSim.Region.ScriptEngine.Interfaces;
 using OpenSim.Region.ScriptEngine.Shared.Api.Interfaces;
 using OpenSim.Services.Interfaces;
-
-using PrimType = OpenSim.Region.Framework.Scenes.PrimType;
 using GridRegion = OpenSim.Services.Interfaces.GridRegion;
+using PresenceInfo = OpenSim.Services.Interfaces.PresenceInfo;
+using PrimType = OpenSim.Region.Framework.Scenes.PrimType;
 using AssetLandmark = OpenSim.Framework.AssetLandmark;
 
 using LSL_Float = OpenSim.Region.ScriptEngine.Shared.LSL_Types.LSLFloat;
@@ -848,10 +848,10 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
         public string resolveName(UUID objecUUID)
         {
             // try avatar username surname
-            CachedUserInfo profile = World.CommsManager.UserProfileCacheService.GetUserDetails(objecUUID);
-            if (profile != null && profile.UserProfile != null)
+            UserAccount account = World.UserAccountService.GetUserAccount(World.RegionInfo.ScopeID, objecUUID);
+            if (account != null)
             {
-                string avatarname = profile.UserProfile.FirstName + " " + profile.UserProfile.SurName;
+                string avatarname = account.Name;
                 return avatarname;
             }
             // try an scene object
@@ -2896,9 +2896,11 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
 
                 ScenePresence presence = World.GetScenePresence(m_host.OwnerID);
 
-                m_ScriptEngine.World.AttachObject(presence.ControllingClient,
-                        grp.LocalId, (uint)attachment, Quaternion.Identity,
-                        Vector3.Zero, false);
+                IAttachmentsModule attachmentsModule = m_ScriptEngine.World.AttachmentsModule;
+                if (attachmentsModule != null)
+                    attachmentsModule.AttachObject(
+                        presence.ControllingClient, grp.LocalId, 
+                        (uint)attachment, Quaternion.Identity, Vector3.Zero, false);
             }
         }
 
@@ -2929,8 +2931,9 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
 
                 ScenePresence presence = World.GetScenePresence(m_host.OwnerID);
 
-                m_ScriptEngine.World.DetachSingleAttachmentToInv(itemID,
-                        presence.ControllingClient);
+                IAttachmentsModule attachmentsModule = m_ScriptEngine.World.AttachmentsModule;
+                if (attachmentsModule != null)
+                    attachmentsModule.ShowDetachInUserInventory(itemID, presence.ControllingClient);
             }
         }
 
@@ -3887,13 +3890,12 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
 
             UUID uuid = (UUID)id;
 
-            UserProfileData userProfile =
-                    World.CommsManager.UserService.GetUserProfile(uuid);
+            UserAccount account = World.UserAccountService.GetUserAccount(World.RegionInfo.ScopeID, uuid);
 
-            UserAgentData userAgent =
-                    World.CommsManager.UserService.GetAgentByUUID(uuid);
+            PresenceInfo[] pinfos = World.PresenceService.GetAgents(new string[] { uuid.ToString() });
+            PresenceInfo pinfo = PresenceInfo.GetOnlinePresence(pinfos);
 
-            if (userProfile == null || userAgent == null)
+            if (pinfo == null)
                 return UUID.Zero.ToString();
 
             string reply = String.Empty;
@@ -3902,17 +3904,17 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
             {
             case 1: // DATA_ONLINE (0|1)
                 // TODO: implement fetching of this information
-                if (userProfile.CurrentAgent!=null && userProfile.CurrentAgent.AgentOnline)
+                if (pinfo != null)
                     reply = "1";
-                else
+                else 
                     reply = "0";
                 break;
             case 2: // DATA_NAME (First Last)
-                reply = userProfile.FirstName + " " + userProfile.SurName;
+                reply = account.FirstName + " " + account.LastName;
                 break;
             case 3: // DATA_BORN (YYYY-MM-DD)
                 DateTime born = new DateTime(1970, 1, 1, 0, 0, 0, 0);
-                born = born.AddSeconds(userProfile.Created);
+                born = born.AddSeconds(account.Created);
                 reply = born.ToString("yyyy-MM-dd");
                 break;
             case 4: // DATA_RATING (0,0,0,0,0,0)
@@ -4007,10 +4009,34 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
             ScriptSleep(5000);
         }
 
-        public void llTextBox(string avatar, string message, int chat_channel)
+        public void llTextBox(string agent, string message, int chatChannel)
         {
+            IDialogModule dm = World.RequestModuleInterface<IDialogModule>();
+
+            if (dm == null)
+                return;
+
             m_host.AddScriptLPS(1);
-            NotImplemented("llTextBox");
+            UUID av = new UUID();
+            if (!UUID.TryParse(agent,out av))
+            {
+                LSLError("First parameter to llDialog needs to be a key");
+                return;
+            }
+
+            if (message == string.Empty)
+            {
+                ShoutError("Trying to use llTextBox with empty message.");
+            }
+            else if (message.Length > 512)
+            {
+                ShoutError("Trying to use llTextBox with message over 512 characters.");
+            }
+            else
+            {
+                dm.SendTextBoxToUser(av, message, chatChannel, m_host.Name, m_host.UUID, m_host.OwnerID);
+                ScriptSleep(1000);
+            }
         }
 
         public void llModifyLand(int action, int brush)
@@ -4025,6 +4051,7 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
 
         public void llCollisionSound(string impact_sound, double impact_volume)
         {
+
             m_host.AddScriptLPS(1);
             // TODO: Parameter check logic required.
             UUID soundId = UUID.Zero;
@@ -5065,7 +5092,7 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
         public LSL_Integer llGetRegionAgentCount()
         {
             m_host.AddScriptLPS(1);
-            return new LSL_Integer(World.GetAvatars().Count);
+            return new LSL_Integer(World.GetRootAgentCount());
         }
 
         public LSL_Vector llGetRegionCorner()
@@ -5406,12 +5433,31 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
         public void llSetTextureAnim(int mode, int face, int sizex, int sizey, double start, double length, double rate)
         {
             m_host.AddScriptLPS(1);
+
+            SetTextureAnim(m_host, mode, face, sizex, sizey, start, length, rate);
+        }
+
+        public void llSetLinkTextureAnim(int linknumber, int mode, int face, int sizex, int sizey, double start, double length, double rate)
+        {
+            m_host.AddScriptLPS(1);
+
+            List<SceneObjectPart> parts = GetLinkParts(linknumber);
+
+            foreach (var part in parts)
+            {
+                SetTextureAnim(part, mode, face, sizex, sizey, start, length, rate);
+            }
+        }
+
+        private void SetTextureAnim(SceneObjectPart part, int mode, int face, int sizex, int sizey, double start, double length, double rate)
+        {
+
             Primitive.TextureAnimation pTexAnim = new Primitive.TextureAnimation();
             pTexAnim.Flags = (Primitive.TextureAnimMode)mode;
 
             //ALL_SIDES
             if (face == ScriptBaseClass.ALL_SIDES)
-                    face = 255;
+                face = 255;
 
             pTexAnim.Face = (uint)face;
             pTexAnim.Length = (float)length;
@@ -5420,9 +5466,9 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
             pTexAnim.SizeY = (uint)sizey;
             pTexAnim.Start = (float)start;
 
-            m_host.AddTextureAnimation(pTexAnim);
-            m_host.SendFullUpdateToAllClients();
-            m_host.ParentGroup.HasGroupChanged = true;
+            part.AddTextureAnimation(pTexAnim);
+            part.SendFullUpdateToAllClients();
+            part.ParentGroup.HasGroupChanged = true;
         }
 
         public void llTriggerSoundLimited(string sound, double volume, LSL_Vector top_north_east,
@@ -5819,13 +5865,31 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
             return ps;
         }
 
+        public void llLinkParticleSystem(int linknumber, LSL_List rules)
+        {
+            m_host.AddScriptLPS(1);
+
+            List<SceneObjectPart> parts = GetLinkParts(linknumber);
+
+            foreach (var part in parts)
+            {
+                SetParticleSystem(part, rules);
+            }
+        }
+
         public void llParticleSystem(LSL_List rules)
         {
             m_host.AddScriptLPS(1);
+            SetParticleSystem(m_host, rules);
+        }
+
+        private void SetParticleSystem(SceneObjectPart part, LSL_List rules) {
+
+       
             if (rules.Length == 0)
             {
-                m_host.RemoveParticleSystem();
-                m_host.ParentGroup.HasGroupChanged = true;
+                part.RemoveParticleSystem();
+                part.ParentGroup.HasGroupChanged = true;
             }
             else
             {
@@ -5836,7 +5900,7 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
 
                 for (int i = 0; i < rules.Length; i += 2)
                 {
-                    switch (Convert.ToInt32(rules.Data[i]))
+                    switch (rules.GetLSLIntegerItem(i))
                     {
                         case (int)ScriptBaseClass.PSYS_PART_FLAGS:
                             prules.PartDataFlags = (Primitive.ParticleSystem.ParticleDataFlags)(uint)rules.GetLSLIntegerItem(i + 1);
@@ -5936,7 +6000,7 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
                             }
                             else
                             {
-                                prules.Target = m_host.UUID;
+                                prules.Target = part.UUID;
                             }
                             break;
 
@@ -5962,10 +6026,10 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
                 }
                 prules.CRC = 1;
 
-                m_host.AddNewParticleSystem(prules);
-                m_host.ParentGroup.HasGroupChanged = true;
+                part.AddNewParticleSystem(prules);
+                part.ParentGroup.HasGroupChanged = true;
             }
-            m_host.SendFullUpdateToAllClients();
+            part.SendFullUpdateToAllClients();
         }
 
         public void llGroundRepel(double height, int water, double tau)
@@ -6759,6 +6823,11 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
                 SetPrimParams(part, rules);
         }
 
+        public void llSetLinkPrimitiveParamsFast(int linknumber, LSL_List rules)
+        {
+            llSetLinkPrimitiveParams(linknumber, rules);
+        }
+
         protected void SetPrimParams(SceneObjectPart part, LSL_List rules)
         {
             int idx = 0;
@@ -7115,6 +7184,18 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
                         int style = rules.GetLSLIntegerItem(idx++);
                         SetTexGen(part, face, style);
                         break;
+                    case (int)ScriptBaseClass.PRIM_TEXT:
+                        if (remain < 3)
+                            return;
+                        string primText = rules.GetLSLStringItem(idx++);
+                        LSL_Vector primTextColor = rules.GetVector3Item(idx++);
+                        LSL_Float primTextAlpha = rules.GetLSLFloatItem(idx++);
+                        Vector3 av3 = new Vector3(Util.Clip((float)primTextColor.x, 0.0f, 1.0f),
+                                      Util.Clip((float)primTextColor.y, 0.0f, 1.0f),
+                                      Util.Clip((float)primTextColor.z, 0.0f, 1.0f));
+                        part.SetText(primText, av3, Util.Clip((float)primTextAlpha, 0.0f, 1.0f));
+
+                        break;
                 }
             }
         }
@@ -7356,6 +7437,23 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
         {
             m_host.AddScriptLPS(1);
             return GetLinkPrimitiveParams(m_host, rules);
+        }
+
+        public LSL_List llGetLinkPrimitiveParams(int linknumber, LSL_List rules)
+        {
+            m_host.AddScriptLPS(1);
+
+            List<SceneObjectPart> parts = GetLinkParts(linknumber);
+
+            LSL_List res = new LSL_List();
+
+            foreach (var part in parts)
+            {
+                LSL_List partRes = GetLinkPrimitiveParams(part, rules);
+                res += partRes;
+            }
+
+            return res;
         }
 
         public LSL_List GetLinkPrimitiveParams(SceneObjectPart part, LSL_List rules)
@@ -7634,6 +7732,14 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
                         face=(int)rules.GetLSLIntegerItem(idx++);
 
                         res.Add(new LSL_Float(0));
+                        break;
+                    case (int)ScriptBaseClass.PRIM_TEXT:
+                        Color4 textColor = part.GetTextColor();
+                        res.Add(part.Text);
+                        res.Add(new LSL_Vector(textColor.R,
+                                               textColor.G,
+                                               textColor.B));
+                        res.Add(new LSL_Float(textColor.A));
                         break;
                 }
             }
@@ -8665,17 +8771,19 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
                     landObject.SetMediaUrl(url);
 
                     // now send to all (non-child) agents
-                    List<ScenePresence> agents = World.GetAvatars();
-                    foreach (ScenePresence agent in agents)
+                    World.ForEachScenePresence(delegate(ScenePresence sp)
                     {
-                        agent.ControllingClient.SendParcelMediaUpdate(landData.MediaURL,
-                                                                      landData.MediaID,
-                                                                      landData.MediaAutoScale,
-                                                                      mediaType,
-                                                                      description,
-                                                                      width, height,
-                                                                      loop);
-                    }
+                        if (!sp.IsChildAgent)
+                        {
+                            sp.ControllingClient.SendParcelMediaUpdate(landData.MediaURL,
+                                                                          landData.MediaID,
+                                                                          landData.MediaAutoScale,
+                                                                          mediaType,
+                                                                          description,
+                                                                          width, height,
+                                                                          loop);
+                        }
+                    });
                 }
                 else if (!presence.IsChildAgent)
                 {
@@ -8696,13 +8804,15 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
                 if (presence == null)
                 {
                     // send to all (non-child) agents
-                    List<ScenePresence> agents = World.GetAvatars();
-                    foreach (ScenePresence agent in agents)
+                    World.ForEachScenePresence(delegate(ScenePresence sp)
                     {
-                        agent.ControllingClient.SendParcelMediaCommand(0x4, // TODO what is this?
-                                                                       (ParcelMediaCommandEnum)commandToSend,
-                                                                       time);
-                    }
+                        if (!sp.IsChildAgent)
+                        {
+                            sp.ControllingClient.SendParcelMediaCommand(0x4, // TODO what is this?
+                                                                           (ParcelMediaCommandEnum)commandToSend,
+                                                                           time);
+                        }
+                    });
                 }
                 else if (!presence.IsChildAgent)
                 {
@@ -9705,88 +9815,9 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
 
                 Notecard nc = new Notecard();
                 nc.lastRef = DateTime.Now;
-                nc.text = ParseText(text.Replace("\r", "").Split('\n'));
+                nc.text = SLUtil.ParseNotecardToList(text).ToArray();
                 m_Notecards[assetID] = nc;
             }
-        }
-
-        protected static string[] ParseText(string[] input)
-        {
-            int idx = 0;
-            int level = 0;
-            List<string> output = new List<string>();
-            string[] words;
-
-            while (idx < input.Length)
-            {
-                if (input[idx] == "{")
-                {
-                    level++;
-                    idx++;
-                    continue;
-                }
-
-                if (input[idx]== "}")
-                {
-                    level--;
-                    idx++;
-                    continue;
-                }
-
-                switch (level)
-                {
-                case 0:
-                    words = input[idx].Split(' '); // Linden text ver
-                    // Notecards are created *really* empty. Treat that as "no text" (just like after saving an empty notecard)
-                    if (words.Length < 3)
-                        return new String[0];
-
-                    int version = int.Parse(words[3]);
-                    if (version != 2)
-                        return new String[0];
-                    break;
-                case 1:
-                    words = input[idx].Split(' ');
-                    if (words[0] == "LLEmbeddedItems")
-                        break;
-                    if (words[0] == "Text")
-                    {
-                        int len = int.Parse(words[2]);
-                        idx++;
-
-                        int count = -1;
-
-                        while (count < len)
-                        {
-                            // int l = input[idx].Length;
-                            string ln = input[idx];
-
-                            int need = len-count-1;
-                            if (ln.Length > need)
-                                ln = ln.Substring(0, need);
-
-                            output.Add(ln);
-                            count += ln.Length + 1;
-                            idx++;
-                        }
-
-                        return output.ToArray();
-                    }
-                    break;
-                case 2:
-                    words = input[idx].Split(' '); // count
-                    if (words[0] == "count")
-                    {
-                        int c = int.Parse(words[1]);
-                        if (c > 0)
-                            return new String[0];
-                        break;
-                    }
-                    break;
-                }
-                idx++;
-            }
-            return output.ToArray();
         }
 
         public static bool IsCached(UUID assetID)
