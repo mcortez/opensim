@@ -554,27 +554,7 @@ namespace OpenSim.Region.OptionalModules.Avatar.XmlRpcGroups
 
         public GroupRecord GetGroupRecord(string name)
         {
-            if (m_debugEnabled) 
-                m_log.DebugFormat("[GROUPS]: {0} called", System.Reflection.MethodBase.GetCurrentMethod().Name);
-
-            // XXX: Two call implementation.  This could be done in a single call if the server itself were to
-            // implement the code below.
-
-            List<DirGroupsReplyData> groups = m_groupData.FindGroups(UUID.Zero, name);
-
-            DirGroupsReplyData? foundGroup = null;
-            
-            foreach (DirGroupsReplyData group in groups)
-            {
-                // We must have an exact match - I believe FindGroups will return partial matches
-                if (group.groupName == name)
-                    foundGroup = group;
-            }            
-
-            if (null == foundGroup)
-                return null;
-
-            return GetGroupRecord(((DirGroupsReplyData)foundGroup).groupID);
+            return m_groupData.GetGroupRecord(null, UUID.Zero, name);
         }
         
         public void ActivateGroup(IClientAPI remoteClient, UUID groupID)
