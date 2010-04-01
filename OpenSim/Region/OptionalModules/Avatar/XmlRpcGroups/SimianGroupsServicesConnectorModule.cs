@@ -500,7 +500,9 @@ namespace OpenSim.Region.OptionalModules.Avatar.XmlRpcGroups
         {
             if (m_debugEnabled) m_log.InfoFormat("[SIMIAN-GROUPS-CONNECTOR]  {0} called", System.Reflection.MethodBase.GetCurrentMethod().Name);
 
-            SimianAddGeneric(agentID, "Group", "ActiveGroup", groupID.ToString());
+            OSDMap ActiveGroup = new OSDMap();
+            ActiveGroup["GroupID"] = OSD.FromUUID(groupID);
+            SimianAddGeneric(agentID, "Group", "ActiveGroup", ActiveGroup);
         }
 
         public void SetAgentActiveGroupRole(UUID requestingAgentID, UUID agentID, UUID groupID, UUID roleID)
@@ -624,7 +626,7 @@ namespace OpenSim.Region.OptionalModules.Avatar.XmlRpcGroups
         {
             if (m_debugEnabled) m_log.InfoFormat("[SIMIAN-GROUPS-CONNECTOR]  {0} called", System.Reflection.MethodBase.GetCurrentMethod().Name);
 
-            SimianAddGeneric(agentID, "GroupRoleMember:" + groupID.ToString(), roleID.ToString(), "");
+            SimianAddGeneric(agentID, "GroupRoleMember:" + groupID.ToString(), roleID.ToString(), new OSDMap());
         }
 
         public void RemoveAgentFromGroupRole(UUID requestingAgentID, UUID agentID, UUID groupID, UUID roleID)
@@ -1033,11 +1035,7 @@ namespace OpenSim.Region.OptionalModules.Avatar.XmlRpcGroups
         {
             if (m_debugEnabled) m_log.InfoFormat("[SIMIAN-GROUPS-CONNECTOR]  {0} called", System.Reflection.MethodBase.GetCurrentMethod().Name);
 
-            return SimianAddGeneric(ownerID, type, key, OSDParser.SerializeJsonString(map));
-        }
-        private bool SimianAddGeneric(UUID ownerID, string type, string key, string value)
-        {
-            if (m_debugEnabled) m_log.InfoFormat("[SIMIAN-GROUPS-CONNECTOR]  {0} called", System.Reflection.MethodBase.GetCurrentMethod().Name);
+            string value = OSDParser.SerializeJsonString(map);
 
             NameValueCollection RequestArgs = new NameValueCollection
             {
