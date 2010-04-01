@@ -775,39 +775,42 @@ namespace OpenSim.Region.OptionalModules.Avatar.XmlRpcGroups
             return memberships;
         }
 
-        public List<GroupRolesData> GetAgentGroupRoles(UUID requestingAgentID, UUID AgentID, UUID GroupID)
+        public List<GroupRolesData> GetAgentGroupRoles(UUID requestingAgentID, UUID agentID, UUID groupID)
         {
             if (m_debugEnabled) m_log.InfoFormat("[SIMIAN-GROUPS-CONNECTOR]  {0} called", System.Reflection.MethodBase.GetCurrentMethod().Name);
 
             List<GroupRolesData> Roles = new List<GroupRolesData>();
 
             Dictionary<string, OSDMap> GroupRoles;
-            if (SimianGetGenericEntries(AgentID, "GroupRole" + GroupID.ToString(), out GroupRoles))
+            if (SimianGetGenericEntries(groupID, "GroupRole", out GroupRoles))
             {
-                foreach (KeyValuePair<string, OSDMap> kvp in GroupRoles)
+                Dictionary<string, OSDMap> MemberRoles;
+                if (SimianGetGenericEntries(agentID, "GroupRole" + groupID.ToString(), out MemberRoles))
                 {
-                    GroupRolesData data = new GroupRolesData();
-                    data.RoleID = UUID.Parse(kvp.Key);
-                    data.Name = kvp.Value["Name"].AsString();
-                    data.Description = kvp.Value["Description"].AsString();
-                    data.Title = kvp.Value["Title"].AsString();
-                    data.Powers = kvp.Value["Powers"].AsULong();
+                    foreach (KeyValuePair<string, OSDMap> kvp in MemberRoles)
+                    {
+                        GroupRolesData data = new GroupRolesData();
+                        data.RoleID = UUID.Parse(kvp.Key);
+                        data.Name = GroupRoles[kvp.Key]["Name"].AsString();
+                        data.Description = GroupRoles[kvp.Key]["Description"].AsString();
+                        data.Title = GroupRoles[kvp.Key]["Title"].AsString();
+                        data.Powers = GroupRoles[kvp.Key]["Powers"].AsULong();
 
-                    Roles.Add(data);
+                        Roles.Add(data);
+                    }
                 }
             }
-
             return Roles;
         }
 
-        public List<GroupRolesData> GetGroupRoles(UUID requestingAgentID, UUID GroupID)
+        public List<GroupRolesData> GetGroupRoles(UUID requestingAgentID, UUID groupID)
         {
             if (m_debugEnabled) m_log.InfoFormat("[SIMIAN-GROUPS-CONNECTOR]  {0} called", System.Reflection.MethodBase.GetCurrentMethod().Name);
 
             List<GroupRolesData> Roles = new List<GroupRolesData>();
 
             Dictionary<string, OSDMap> GroupRoles;
-            if (SimianGetGenericEntries(GroupID, "GroupRole", out GroupRoles))
+            if (SimianGetGenericEntries(groupID, "GroupRole", out GroupRoles))
             {
                 foreach (KeyValuePair<string, OSDMap> role in GroupRoles)
                 {
@@ -821,7 +824,7 @@ namespace OpenSim.Region.OptionalModules.Avatar.XmlRpcGroups
                     data.Powers = role.Value["Powers"].AsULong();
 
                     Dictionary<UUID, OSDMap> GroupRoleMembers;
-                    if (SimianGetGenericEntries("GroupRole" + GroupID.ToString(), role.Key, out GroupRoleMembers))
+                    if (SimianGetGenericEntries("GroupRole" + groupID.ToString(), role.Key, out GroupRoleMembers))
                     {
                         data.Members = GroupRoleMembers.Count;
                     }
