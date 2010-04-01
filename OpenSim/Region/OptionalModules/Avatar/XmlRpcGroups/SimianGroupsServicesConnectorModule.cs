@@ -527,8 +527,8 @@ namespace OpenSim.Region.OptionalModules.Avatar.XmlRpcGroups
                 GroupMemberInfo = new OSDMap();
             }
             
-            GroupMemberInfo["AcceptNotices"] = OSD.FromString(acceptNotices ? "1" : "0");
-            GroupMemberInfo["ListInProfile"] = OSD.FromString(listInProfile ? "1" : "0");
+            GroupMemberInfo["AcceptNotices"] = OSD.FromBoolean(acceptNotices);
+            GroupMemberInfo["ListInProfile"] = OSD.FromBoolean(listInProfile);
             GroupMemberInfo["Contribution"] = OSD.FromInteger(0);
             GroupMemberInfo["SelectedRole"] = OSD.FromUUID(UUID.Zero);
             SimianAddGeneric(agentID, "GroupMember", groupID.ToString(), GroupMemberInfo);
