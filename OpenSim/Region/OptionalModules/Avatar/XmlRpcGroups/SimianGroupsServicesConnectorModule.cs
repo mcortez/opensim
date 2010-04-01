@@ -407,16 +407,14 @@ namespace OpenSim.Region.OptionalModules.Avatar.XmlRpcGroups
             OSDMap GroupInfoMap = null;
             if (groupID != UUID.Zero)
             {
-                string key;
-                if (!SimianGetFirstGenericEntry(groupID, "Group", out key, out GroupInfoMap))
+                if (!SimianGetFirstGenericEntry(groupID, "Group", out groupName, out GroupInfoMap))
                 {
                     return null;
                 }
-            }
-            if ((groupName != null) && (groupName != string.Empty))
+            } 
+            else if ((groupName != null) && (groupName != string.Empty))
             {
-                UUID OwnerID;
-                if (!SimianGetFirstGenericEntry("Group", groupName, out OwnerID, out GroupInfoMap))
+                if (!SimianGetFirstGenericEntry("Group", groupName, out groupID, out GroupInfoMap))
                 {
                     return null;
                 }
@@ -424,12 +422,9 @@ namespace OpenSim.Region.OptionalModules.Avatar.XmlRpcGroups
 
             GroupRecord GroupInfo = new GroupRecord();
 
-            GroupInfo.GroupID = GroupInfoMap["GroupID"].AsUUID();
-            GroupInfo.GroupName = GroupInfoMap["Name"].AsString();
-            if (GroupInfoMap["Charter"] != null)
-            {
-                GroupInfo.Charter = GroupInfoMap["Charter"].AsString();
-            }
+            GroupInfo.GroupID = groupID;
+            GroupInfo.GroupName = groupName;
+            GroupInfo.Charter = GroupInfoMap["Charter"].AsString();
             GroupInfo.ShowInList = GroupInfoMap["ShowInList"].AsBoolean();
             GroupInfo.GroupPicture = GroupInfoMap["InsigniaID"].AsUUID();
             GroupInfo.MembershipFee = GroupInfoMap["MembershipFee"].AsInteger();
