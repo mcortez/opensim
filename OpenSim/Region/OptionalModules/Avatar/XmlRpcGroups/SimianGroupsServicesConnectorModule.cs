@@ -876,11 +876,8 @@ namespace OpenSim.Region.OptionalModules.Avatar.XmlRpcGroups
 
                     data.AgentID = member.Key;
 
-                    UUID SelectedRoleID = UUID.Zero;
-                    if (member.Value.ContainsKey("SelectedRoleID"))
-                    {
-                        SelectedRoleID = member.Value["SelectedRoleID"].AsUUID();
-                    }
+                    UUID SelectedRoleID = member.Value["SelectedRoleID"].AsUUID();
+
                     data.AcceptNotices = member.Value["AcceptNotices"].AsBoolean();
                     data.ListInProfile = member.Value["ListInProfile"].AsBoolean();
                     data.Contribution = member.Value["Contribution"].AsInteger();
