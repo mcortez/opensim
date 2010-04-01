@@ -1099,6 +1099,9 @@ namespace OpenSim.Region.OptionalModules.Avatar.XmlRpcGroups
                     OSDMap entryMap = entryArray[0] as OSDMap;
                     key = entryMap["Key"].AsString();
                     map = (OSDMap)OSDParser.DeserializeJson(entryMap["Value"].AsString());
+
+                    if (m_debugEnabled) m_log.InfoFormat("[SIMIAN-GROUPS-CONNECTOR]  Generics Result {0}", entryMap["Value"].AsString());
+
                     return true;
                 }
             }
@@ -1132,6 +1135,9 @@ namespace OpenSim.Region.OptionalModules.Avatar.XmlRpcGroups
                     OSDMap entryMap = entryArray[0] as OSDMap;
                     ownerID = entryMap["OwnerID"].AsUUID();
                     map = (OSDMap)OSDParser.DeserializeJson(entryMap["Value"].AsString());
+
+                    if (m_debugEnabled) m_log.InfoFormat("[SIMIAN-GROUPS-CONNECTOR]  Generics Result {0}", entryMap["Value"].AsString());
+
                     return true;
                 }
             }
@@ -1166,6 +1172,9 @@ namespace OpenSim.Region.OptionalModules.Avatar.XmlRpcGroups
                     OSDMap entryMap = entryArray[0] as OSDMap;
                     key = entryMap["Key"].AsString();
                     map = (OSDMap)OSDParser.DeserializeJson(entryMap["Value"].AsString());
+
+                    if (m_debugEnabled) m_log.InfoFormat("[SIMIAN-GROUPS-CONNECTOR]  Generics Result {0}", entryMap["Value"].AsString());
+
                     return true;
                 }
             }
@@ -1198,6 +1207,7 @@ namespace OpenSim.Region.OptionalModules.Avatar.XmlRpcGroups
                 OSDArray entryArray = (OSDArray)response["Entries"];
                 foreach (OSDMap entryMap in entryArray)
                 {
+                    if (m_debugEnabled) m_log.InfoFormat("[SIMIAN-GROUPS-CONNECTOR]  Generics Result {0}", entryMap["Value"].AsString());
                     maps.Add(entryMap["Key"].AsString(), (OSDMap)OSDParser.DeserializeJson(entryMap["Value"].AsString()));
                 }
                 return true;
@@ -1230,6 +1240,7 @@ namespace OpenSim.Region.OptionalModules.Avatar.XmlRpcGroups
                 OSDArray entryArray = (OSDArray)response["Entries"];
                 foreach (OSDMap entryMap in entryArray)
                 {
+                    if (m_debugEnabled) m_log.InfoFormat("[SIMIAN-GROUPS-CONNECTOR]  Generics Result {0}", entryMap["Value"].AsString());
                     maps.Add(entryMap["OwnerID"].AsUUID(), (OSDMap)OSDParser.DeserializeJson(entryMap["Value"].AsString()));
                 }
                 return true;
@@ -1237,7 +1248,7 @@ namespace OpenSim.Region.OptionalModules.Avatar.XmlRpcGroups
             else
             {
                 maps = null;
-                m_log.WarnFormat("[SIMIAN GROUPS CONNECTOR]: Error retrieving group info ({0})", response["Message"]);
+                m_log.WarnFormat("[SIMIAN-GROUPS-CONNECTOR]: Error retrieving group info ({0})", response["Message"]);
             }
             return false;
         }

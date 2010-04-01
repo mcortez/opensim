@@ -1132,6 +1132,11 @@ namespace OpenSim.Region.OptionalModules.Avatar.XmlRpcGroups
             llDataStruct.Add("GroupData", GroupData);
             llDataStruct.Add("NewGroupData", NewGroupData);
 
+            if (m_debugEnabled)
+            {
+                m_log.InfoFormat("[GROUPS]: {0}", OSDParser.SerializeJsonString(llDataStruct));
+            }
+
             IEventQueue queue = remoteClient.Scene.RequestModuleInterface<IEventQueue>();
 
             if (queue != null)
