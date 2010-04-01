@@ -61,7 +61,7 @@ using OpenSim.Services.Interfaces;
  * + ListInProfile  [bool]
  * + Contribution   [int]
  *
- * UserID -> GroupRoleMember:[GroupID] -> RoleID
+ * UserID -> GroupRole[GroupID] -> RoleID
  * 
  * GroupID -> Group -> GroupName 
  * + Charter
@@ -353,7 +353,7 @@ namespace OpenSim.Region.OptionalModules.Avatar.XmlRpcGroups
             {
                 // Remove all GroupRole Members from Role
                 Dictionary<UUID, OSDMap> GroupRoleMembers;
-                string GroupRoleMemberType = "GroupRoleMember:" + groupID.ToString();
+                string GroupRoleMemberType = "GroupRole" + groupID.ToString();
                 if (SimianGetGenericEntries(GroupRoleMemberType, roleID.ToString(), out GroupRoleMembers))
                 {
                     foreach(UUID UserID in GroupRoleMembers.Keys)
@@ -604,7 +604,7 @@ namespace OpenSim.Region.OptionalModules.Avatar.XmlRpcGroups
             // By using a Simian Generics Type consisting of a prefix and a groupID, 
             // combined with RoleID as key allows us to get a list of roles a particular member
             // of a group is assigned to.
-            string GroupRoleMemberType = "GroupRoleMember:" + groupID.ToString();
+            string GroupRoleMemberType = "GroupRole" + groupID.ToString();
 
             // Take Agent out of all other group roles
             Dictionary<string, OSDMap> GroupRoles;
@@ -621,7 +621,7 @@ namespace OpenSim.Region.OptionalModules.Avatar.XmlRpcGroups
         {
             if (m_debugEnabled) m_log.InfoFormat("[SIMIAN-GROUPS-CONNECTOR]  {0} called", System.Reflection.MethodBase.GetCurrentMethod().Name);
 
-            SimianAddGeneric(agentID, "GroupRoleMember:" + groupID.ToString(), roleID.ToString(), new OSDMap());
+            SimianAddGeneric(agentID, "GroupRole" + groupID.ToString(), roleID.ToString(), new OSDMap());
         }
 
         public void RemoveAgentFromGroupRole(UUID requestingAgentID, UUID agentID, UUID groupID, UUID roleID)
@@ -633,7 +633,7 @@ namespace OpenSim.Region.OptionalModules.Avatar.XmlRpcGroups
             {
                 EnsureRoleNotSelectedByMember(groupID, roleID, agentID);
 
-                string GroupRoleMemberType = "GroupRoleMember:" + groupID.ToString();
+                string GroupRoleMemberType = "GroupRole" + groupID.ToString();
                 SimianRemoveGenericEntry(agentID, GroupRoleMemberType, roleID.ToString());
             }
         }
@@ -782,7 +782,7 @@ namespace OpenSim.Region.OptionalModules.Avatar.XmlRpcGroups
             List<GroupRolesData> Roles = new List<GroupRolesData>();
 
             Dictionary<string, OSDMap> GroupRoles;
-            if (SimianGetGenericEntries(AgentID, "GroupRoleMember:" + GroupID.ToString(), out GroupRoles))
+            if (SimianGetGenericEntries(AgentID, "GroupRole" + GroupID.ToString(), out GroupRoles))
             {
                 foreach (KeyValuePair<string, OSDMap> kvp in GroupRoles)
                 {
@@ -821,7 +821,7 @@ namespace OpenSim.Region.OptionalModules.Avatar.XmlRpcGroups
                     data.Powers = role.Value["Powers"].AsULong();
 
                     Dictionary<UUID, OSDMap> GroupRoleMembers;
-                    if (SimianGetGenericEntries("GroupRoleMember:" + GroupID.ToString(), role.Key, out GroupRoleMembers))
+                    if (SimianGetGenericEntries("GroupRole" + GroupID.ToString(), role.Key, out GroupRoleMembers))
                     {
                         data.Members = GroupRoleMembers.Count;
                     }
@@ -861,7 +861,7 @@ namespace OpenSim.Region.OptionalModules.Avatar.XmlRpcGroups
 
             // Locally cache list of group owners
             Dictionary<UUID, OSDMap> GroupOwners;
-            SimianGetGenericEntries("GroupRoleMember:" + GroupID.ToString(), GroupOwnerRoleID.ToString(), out GroupOwners);
+            SimianGetGenericEntries("GroupRole" + GroupID.ToString(), GroupOwnerRoleID.ToString(), out GroupOwners);
 
 
             Dictionary<UUID, OSDMap> GroupMembers;
@@ -908,7 +908,7 @@ namespace OpenSim.Region.OptionalModules.Avatar.XmlRpcGroups
                 foreach( KeyValuePair<string, OSDMap> Role in GroupRoles )
                 {
                     Dictionary<UUID, OSDMap> GroupRoleMembers;
-                    if( SimianGetGenericEntries("GroupRoleMember:"+groupID.ToString(), Role.Key, out GroupRoleMembers) )
+                    if( SimianGetGenericEntries("GroupRole"+groupID.ToString(), Role.Key, out GroupRoleMembers) )
                     {
                         foreach( KeyValuePair<UUID, OSDMap> GroupRoleMember in GroupRoleMembers )
                         {
