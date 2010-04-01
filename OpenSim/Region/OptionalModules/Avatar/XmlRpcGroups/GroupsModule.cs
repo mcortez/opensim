@@ -1236,7 +1236,7 @@ namespace OpenSim.Region.OptionalModules.Avatar.XmlRpcGroups
                 m_log.InfoFormat("[GROUPS]: Get group membership information for {0} requested by {1}", dataForAgentID, requestingClient.AgentId);
                 foreach (GroupMembershipData membership in membershipArray)
                 {
-                    m_log.InfoFormat("[GROUPS]: {0} :: {1} - {2}", dataForAgentID, membership.GroupName, membership.GroupTitle);
+                    m_log.InfoFormat("[GROUPS]: {0} :: {1} - {2} - {3}", dataForAgentID, membership.GroupName, membership.GroupTitle, membership.GroupPowers);
                 }
             }
 

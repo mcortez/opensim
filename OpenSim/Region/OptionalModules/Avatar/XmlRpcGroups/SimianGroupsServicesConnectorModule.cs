@@ -289,10 +289,10 @@ namespace OpenSim.Region.OptionalModules.Avatar.XmlRpcGroups
             if(SimianAddGeneric(GroupID, "Group", name, GroupInfoMap))
             {
                 AddGroupRole(requestingAgentID, GroupID, UUID.Zero, "Everyone", "Members of " + name, "Member of " + name, (ulong)m_DefaultEveryonePowers);
-                AddAgentToGroup(requestingAgentID, requestingAgentID, GroupID, UUID.Zero);
-
                 AddGroupRole(requestingAgentID, GroupID, OwnerRoleID, "Owners", "Owners of " + name, "Owner of " + name, (ulong)m_DefaultOwnerPowers);
-                AddAgentToGroupRole(requestingAgentID, requestingAgentID, GroupID, OwnerRoleID);
+                
+                AddAgentToGroup(requestingAgentID, requestingAgentID, GroupID, OwnerRoleID);
+
                 return GroupID;
             }
             else
@@ -704,11 +704,6 @@ namespace OpenSim.Region.OptionalModules.Avatar.XmlRpcGroups
             {
                 data.Active = UserActiveGroup["GroupID"].AsUUID().Equals(groupID);
             }
-            else
-            {
-                data.Active = false;
-                SetAgentActiveGroup(requestingAgentID, agentID, UUID.Zero);
-            }
 
             OSDMap UserGroupMemberInfo;
             if( SimianGetGenericEntry(agentID, "GroupMember", groupID.ToString(), out UserGroupMemberInfo) )
@@ -771,16 +766,10 @@ namespace OpenSim.Region.OptionalModules.Avatar.XmlRpcGroups
             OSDMap UserActiveGroup;
             if (SimianGetGenericEntry(agentID, "Group", "ActiveGroup", out UserActiveGroup))
             {
-                if (UserActiveGroup.ContainsKey("GroupID"))
-                {
-                    GroupID = UserActiveGroup["GroupID"].AsUUID();
-                }
-                else
-                {
-                    GroupID = UUID.Zero;
-                }
+                GroupID = UserActiveGroup["GroupID"].AsUUID();
             }
 
+            if (m_debugEnabled) m_log.InfoFormat("[SIMIAN-GROUPS-CONNECTOR]  Active GroupID : {0}", GroupID.ToString());
             return GetAgentGroupMembership(requestingAgentID, agentID, GroupID);
         }
 
@@ -1104,6 +1093,10 @@ namespace OpenSim.Region.OptionalModules.Avatar.XmlRpcGroups
 
                     return true;
                 }
+                else
+                {
+                    if (m_debugEnabled) m_log.InfoFormat("[SIMIAN-GROUPS-CONNECTOR]  No Generics Results");
+                }
             }
             else
             {
@@ -1139,6 +1132,10 @@ namespace OpenSim.Region.OptionalModules.Avatar.XmlRpcGroups
                     if (m_debugEnabled) m_log.InfoFormat("[SIMIAN-GROUPS-CONNECTOR]  Generics Result {0}", entryMap["Value"].AsString());
 
                     return true;
+                }
+                else
+                {
+                    if (m_debugEnabled) m_log.InfoFormat("[SIMIAN-GROUPS-CONNECTOR]  No Generics Results");
                 }
             }
             else
@@ -1177,6 +1174,10 @@ namespace OpenSim.Region.OptionalModules.Avatar.XmlRpcGroups
 
                     return true;
                 }
+                else
+                {
+                    if (m_debugEnabled) m_log.InfoFormat("[SIMIAN-GROUPS-CONNECTOR]  No Generics Results");
+                }
             }
             else
             {
@@ -1210,6 +1211,11 @@ namespace OpenSim.Region.OptionalModules.Avatar.XmlRpcGroups
                     if (m_debugEnabled) m_log.InfoFormat("[SIMIAN-GROUPS-CONNECTOR]  Generics Result {0}", entryMap["Value"].AsString());
                     maps.Add(entryMap["Key"].AsString(), (OSDMap)OSDParser.DeserializeJson(entryMap["Value"].AsString()));
                 }
+                if(maps.Count == 0)
+                {
+                    if (m_debugEnabled) m_log.InfoFormat("[SIMIAN-GROUPS-CONNECTOR]  No Generics Results");
+                }
+
                 return true;
             }
             else
@@ -1242,6 +1248,10 @@ namespace OpenSim.Region.OptionalModules.Avatar.XmlRpcGroups
                 {
                     if (m_debugEnabled) m_log.InfoFormat("[SIMIAN-GROUPS-CONNECTOR]  Generics Result {0}", entryMap["Value"].AsString());
                     maps.Add(entryMap["OwnerID"].AsUUID(), (OSDMap)OSDParser.DeserializeJson(entryMap["Value"].AsString()));
+                }
+                if (maps.Count == 0)
+                {
+                    if (m_debugEnabled) m_log.InfoFormat("[SIMIAN-GROUPS-CONNECTOR]  No Generics Results");
                 }
                 return true;
             }
