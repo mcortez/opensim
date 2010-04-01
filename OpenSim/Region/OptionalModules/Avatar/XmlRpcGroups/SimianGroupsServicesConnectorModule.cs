@@ -1020,7 +1020,7 @@ namespace OpenSim.Region.OptionalModules.Avatar.XmlRpcGroups
         #region Simian Util Methods
         private bool SimianAddGeneric(UUID ownerID, string type, string key, OSDMap map)
         {
-            if (m_debugEnabled) m_log.InfoFormat("[SIMIAN-GROUPS-CONNECTOR]  {0} called", System.Reflection.MethodBase.GetCurrentMethod().Name);
+            if (m_debugEnabled) m_log.InfoFormat("[SIMIAN-GROUPS-CONNECTOR]  {0} called ({1},{2},{3})", System.Reflection.MethodBase.GetCurrentMethod().Name, ownerID, type, key);
 
             string value = OSDParser.SerializeJsonString(map);
 
@@ -1053,7 +1053,7 @@ namespace OpenSim.Region.OptionalModules.Avatar.XmlRpcGroups
         /// </summary>
         private bool SimianGetFirstGenericEntry(UUID ownerID, string type, out string key, out OSDMap map)
         {
-            if (m_debugEnabled) m_log.InfoFormat("[SIMIAN-GROUPS-CONNECTOR]  {0} called", System.Reflection.MethodBase.GetCurrentMethod().Name);
+            if (m_debugEnabled) m_log.InfoFormat("[SIMIAN-GROUPS-CONNECTOR]  {0} called ({1},{2})", System.Reflection.MethodBase.GetCurrentMethod().Name, ownerID, type);
 
             NameValueCollection RequestArgs = new NameValueCollection
             {
@@ -1092,7 +1092,7 @@ namespace OpenSim.Region.OptionalModules.Avatar.XmlRpcGroups
         }
         private bool SimianGetFirstGenericEntry(string type, string key, out UUID ownerID, out OSDMap map)
         {
-            if (m_debugEnabled) m_log.InfoFormat("[SIMIAN-GROUPS-CONNECTOR]  {0} called", System.Reflection.MethodBase.GetCurrentMethod().Name);
+            if (m_debugEnabled) m_log.InfoFormat("[SIMIAN-GROUPS-CONNECTOR]  {0} called ({1},{2})", System.Reflection.MethodBase.GetCurrentMethod().Name, type, key);
 
 
             NameValueCollection RequestArgs = new NameValueCollection
@@ -1133,7 +1133,7 @@ namespace OpenSim.Region.OptionalModules.Avatar.XmlRpcGroups
 
         private bool SimianGetGenericEntry(UUID ownerID, string type, string key, out OSDMap map)
         {
-            if (m_debugEnabled) m_log.InfoFormat("[SIMIAN-GROUPS-CONNECTOR]  {0} called", System.Reflection.MethodBase.GetCurrentMethod().Name);
+            if (m_debugEnabled) m_log.InfoFormat("[SIMIAN-GROUPS-CONNECTOR]  {0} called ({1},{2},{3})", System.Reflection.MethodBase.GetCurrentMethod().Name, ownerID, type, key);
 
             NameValueCollection RequestArgs = new NameValueCollection
             {
@@ -1173,7 +1173,7 @@ namespace OpenSim.Region.OptionalModules.Avatar.XmlRpcGroups
 
         private bool SimianGetGenericEntries(UUID ownerID, string type, out Dictionary<string, OSDMap> maps)
         {
-            if (m_debugEnabled) m_log.InfoFormat("[SIMIAN-GROUPS-CONNECTOR]  {0} called", System.Reflection.MethodBase.GetCurrentMethod().Name);
+            if (m_debugEnabled) m_log.InfoFormat("[SIMIAN-GROUPS-CONNECTOR]  {0} called ({1},{2})", System.Reflection.MethodBase.GetCurrentMethod().Name,ownerID, type);
 
             NameValueCollection requestArgs = new NameValueCollection
             {
@@ -1211,7 +1211,7 @@ namespace OpenSim.Region.OptionalModules.Avatar.XmlRpcGroups
         }
         private bool SimianGetGenericEntries(string type, string key, out Dictionary<UUID, OSDMap> maps)
         {
-            if (m_debugEnabled) m_log.InfoFormat("[SIMIAN-GROUPS-CONNECTOR]  {0} called", System.Reflection.MethodBase.GetCurrentMethod().Name);
+            if (m_debugEnabled) m_log.InfoFormat("[SIMIAN-GROUPS-CONNECTOR]  {0} called ({1},{2})", System.Reflection.MethodBase.GetCurrentMethod().Name, type, key);
 
             NameValueCollection requestArgs = new NameValueCollection
             {
@@ -1249,7 +1249,7 @@ namespace OpenSim.Region.OptionalModules.Avatar.XmlRpcGroups
 
         private bool SimianRemoveGenericEntry(UUID ownerID, string type, string key)
         {
-            if (m_debugEnabled) m_log.InfoFormat("[SIMIAN-GROUPS-CONNECTOR]  {0} called", System.Reflection.MethodBase.GetCurrentMethod().Name);
+            if (m_debugEnabled) m_log.InfoFormat("[SIMIAN-GROUPS-CONNECTOR]  {0} called ({1},{2},{3})", System.Reflection.MethodBase.GetCurrentMethod().Name, ownerID, type, key);
 
             NameValueCollection requestArgs = new NameValueCollection
             {
