@@ -711,14 +711,7 @@ namespace OpenSim.Region.OptionalModules.Avatar.XmlRpcGroups
                 data.AcceptNotices = UserGroupMemberInfo["AcceptNotices"].AsBoolean();
                 data.Contribution = UserGroupMemberInfo["Contribution"].AsInteger();
                 data.ListInProfile = UserGroupMemberInfo["ListInProfile"].AsBoolean();
-                if (UserGroupMemberInfo.ContainsKey("SelectedRoleID"))
-                {
-                    data.ActiveRole = UserGroupMemberInfo["SelectedRoleID"].AsUUID();
-                }
-                else
-                {
-                    data.ActiveRole = UUID.Zero;
-                }
+                data.ActiveRole = UserGroupMemberInfo["SelectedRoleID"].AsUUID();
 
                 ///////////////////////////////
                 // Role Specific Information:
@@ -728,7 +721,7 @@ namespace OpenSim.Region.OptionalModules.Avatar.XmlRpcGroups
                 if( SimianGetGenericEntry(groupID, "GroupRole", data.ActiveRole.ToString(), out GroupRoleInfo) )
                 {
                     data.GroupTitle = GroupRoleInfo["Title"].AsString();
-                    data.GroupPowers = GroupRoleInfo["GroupPowers"].AsULong();
+                    data.GroupPowers = GroupRoleInfo["Powers"].AsULong();
                 }
             }
 
@@ -741,12 +734,8 @@ namespace OpenSim.Region.OptionalModules.Avatar.XmlRpcGroups
             {
                 data.GroupID = groupID;
                 data.AllowPublish = GroupInfo["AllowPublish"].AsBoolean();
-                if (GroupInfo["Charter"] != null)
-                {
-                    data.Charter = GroupInfo["Charter"].AsString();
-                }
+                data.Charter = GroupInfo["Charter"].AsString();
                 data.FounderID = GroupInfo["FounderID"].AsUUID();
-                data.GroupID = GroupInfo["GroupID"].AsUUID();
                 data.GroupName = GroupName;
                 data.GroupPicture = GroupInfo["InsigniaID"].AsUUID();
                 data.MaturePublish = GroupInfo["MaturePublish"].AsBoolean();
