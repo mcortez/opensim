@@ -914,7 +914,7 @@ namespace OpenSim.Region.OptionalModules.Avatar.XmlRpcGroups
                         {
                             GroupRoleMembersData data = new GroupRoleMembersData();
 
-                            data.MemberID = GroupRoleMember.Value["AgentID"].AsUUID();
+                            data.MemberID = GroupRoleMember.Key;
                             data.RoleID = UUID.Parse(Role.Key);
 
                             members.Add(data);
