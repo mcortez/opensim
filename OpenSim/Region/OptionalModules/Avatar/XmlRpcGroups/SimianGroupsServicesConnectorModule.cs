@@ -502,7 +502,6 @@ namespace OpenSim.Region.OptionalModules.Avatar.XmlRpcGroups
 
             OSDMap ActiveGroup = new OSDMap();
             ActiveGroup.Add("GroupID", OSD.FromUUID(groupID));
-            m_log.WarnFormat("[SIMIAN-GROUPS-CONNECTOR]  Active Group : ", OSDParser.SerializeJsonString(ActiveGroup));
             SimianAddGeneric(agentID, "Group", "ActiveGroup", ActiveGroup);
         }
 
@@ -717,7 +716,14 @@ namespace OpenSim.Region.OptionalModules.Avatar.XmlRpcGroups
                 data.AcceptNotices = UserGroupMemberInfo["AcceptNotices"].AsBoolean();
                 data.Contribution = UserGroupMemberInfo["Contribution"].AsInteger();
                 data.ListInProfile = UserGroupMemberInfo["ListInProfile"].AsBoolean();
-                data.ActiveRole = UserGroupMemberInfo["SelectedRoleID"].AsUUID();
+                if (UserGroupMemberInfo.ContainsKey("SelectedRoleID"))
+                {
+                    data.ActiveRole = UserGroupMemberInfo["SelectedRoleID"].AsUUID();
+                }
+                else
+                {
+                    data.ActiveRole = UUID.Zero;
+                }
 
                 ///////////////////////////////
                 // Role Specific Information:
@@ -765,7 +771,14 @@ namespace OpenSim.Region.OptionalModules.Avatar.XmlRpcGroups
             OSDMap UserActiveGroup;
             if (SimianGetGenericEntry(agentID, "Group", "ActiveGroup", out UserActiveGroup))
             {
-                GroupID = UserActiveGroup["GroupID"].AsUUID();
+                if (UserActiveGroup.ContainsKey("GroupID"))
+                {
+                    GroupID = UserActiveGroup["GroupID"].AsUUID();
+                }
+                else
+                {
+                    GroupID = UUID.Zero;
+                }
             }
 
             return GetAgentGroupMembership(requestingAgentID, agentID, GroupID);
@@ -887,7 +900,11 @@ namespace OpenSim.Region.OptionalModules.Avatar.XmlRpcGroups
 
                     data.AgentID = member.Key;
 
-                    UUID SelectedRoleID = member.Value["SelectedRoleID"].AsUUID();
+                    UUID SelectedRoleID = UUID.Zero;
+                    if (member.Value.ContainsKey("SelectedRoleID"))
+                    {
+                        SelectedRoleID = member.Value["SelectedRoleID"].AsUUID();
+                    }
                     data.AcceptNotices = member.Value["AcceptNotices"].AsBoolean();
                     data.ListInProfile = member.Value["ListInProfile"].AsBoolean();
                     data.Contribution = member.Value["Contribution"].AsInteger();
