@@ -343,7 +343,8 @@ namespace OpenSim.Region.OptionalModules.Avatar.XmlRpcGroups
                                     GroupID
                                     , groupInfo.GroupName
                                     , new UUID(msg.fromAgentID)
-                                    , msg.message, new UUID(msg.toAgentID)
+                                    , msg.message
+                                    , new UUID(msg.toAgentID)
                                     , msg.fromAgentName
                                     , msg.dialog
                                     , msg.timestamp
@@ -501,6 +502,8 @@ namespace OpenSim.Region.OptionalModules.Avatar.XmlRpcGroups
         /// </summary>
         private IClientAPI GetActiveClient(UUID agentID)
         {
+            if (m_debugEnabled) m_log.WarnFormat("[GROUPS-MESSAGING]: Looking for local client {0}", agentID);
+
             IClientAPI child = null;
 
             // Try root avatar first
@@ -512,16 +515,26 @@ namespace OpenSim.Region.OptionalModules.Avatar.XmlRpcGroups
                     ScenePresence user = (ScenePresence)scene.Entities[agentID];
                     if (!user.IsChildAgent)
                     {
+                        if (m_debugEnabled) m_log.WarnFormat("[GROUPS-MESSAGING]: Found root agent for client : {0}", user.ControllingClient.Name);
                         return user.ControllingClient;
                     }
                     else
                     {
+                        if (m_debugEnabled) m_log.WarnFormat("[GROUPS-MESSAGING]: Found child agent for client : {0}", user.ControllingClient.Name);
                         child = user.ControllingClient;
                     }
                 }
             }
 
             // If we didn't find a root, then just return whichever child we found, or null if none
+            if (child == null)
+            {
+                if (m_debugEnabled) m_log.WarnFormat("[GROUPS-MESSAGING]: Could not find local client for agent : {0}", agentID);
+            }
+            else
+            {
+                if (m_debugEnabled) m_log.WarnFormat("[GROUPS-MESSAGING]: Returning child agent for client : {0}", child.Name);
+            }
             return child;
         }
 
