@@ -61,7 +61,7 @@ namespace OpenSim.Region.OptionalModules.Avatar.XmlRpcGroups
 
         private bool m_connectorEnabled = false;
 
-        private string m_serviceURL = string.Empty;
+        private string m_groupsServerURI = string.Empty;
 
         private bool m_disableKeepAlive = false;
 
@@ -113,11 +113,11 @@ namespace OpenSim.Region.OptionalModules.Avatar.XmlRpcGroups
 
                 m_log.InfoFormat("[GROUPS-CONNECTOR]: Initializing {0}", this.Name);
 
-                m_serviceURL = groupsConfig.GetString("XmlRpcServiceURL", string.Empty);
-                if ((m_serviceURL == null) ||
-                    (m_serviceURL == string.Empty))
+                m_groupsServerURI = groupsConfig.GetString("GroupsServerURI", string.Empty);
+                if ((m_groupsServerURI == null) ||
+                    (m_groupsServerURI == string.Empty))
                 {
-                    m_log.ErrorFormat("Please specify a valid URL for XmlRpcServiceURL in OpenSim.ini, [Groups]");
+                    m_log.ErrorFormat("Please specify a valid URL for GroupsServerURI in OpenSim.ini, [Groups]");
                     m_connectorEnabled = false;
                     return;
                 }
@@ -941,7 +941,7 @@ namespace OpenSim.Region.OptionalModules.Avatar.XmlRpcGroups
 
             try
             {
-                resp = req.Send(m_serviceURL, 10000);
+                resp = req.Send(m_groupsServerURI, 10000);
             }
             catch (Exception e)
             {
