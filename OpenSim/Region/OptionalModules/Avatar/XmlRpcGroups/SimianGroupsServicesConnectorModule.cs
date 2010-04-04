@@ -55,6 +55,9 @@ using OpenSim.Services.Interfaces;
  * UserID -> Group -> ActiveGroup
  * + GroupID
  * 
+ * UserID -> GroupSessionDropped -> GroupID
+ * UserID -> GroupSessionInvited -> GroupID
+ * 
  * UserID -> GroupMember -> GroupID
  * + SelectedRoleID [UUID]
  * + AcceptNotices  [bool]
@@ -62,6 +65,7 @@ using OpenSim.Services.Interfaces;
  * + Contribution   [int]
  *
  * UserID -> GroupRole[GroupID] -> RoleID
+ * 
  * 
  * GroupID -> Group -> GroupName 
  * + Charter
@@ -998,6 +1002,52 @@ namespace OpenSim.Region.OptionalModules.Avatar.XmlRpcGroups
         }
         #endregion
 
+        #region GroupSessionTracking
+
+        public void ResetAgentGroupChatSessions(UUID agentID)
+        {
+            Dictionary<string, OSDMap> agentSessions;
+
+            if (SimianGetGenericEntries(agentID, "GroupSessionDropped", out agentSessions))
+            {
+                foreach (string GroupID in agentSessions.Keys)
+                {
+                    SimianRemoveGenericEntry(agentID, "GroupSessionDropped", GroupID);
+                }
+            }
+
+            if (SimianGetGenericEntries(agentID, "GroupSessionInvited", out agentSessions))
+            {
+                foreach (string GroupID in agentSessions.Keys)
+                {
+                    SimianRemoveGenericEntry(agentID, "GroupSessionInvited", GroupID);
+                }
+            }
+        }
+
+        public bool hasAgentDroppedGroupChatSession(UUID agentID, UUID groupID)
+        {
+            OSDMap session;
+            return SimianGetGenericEntry(agentID, "GroupSessionDropped", groupID.ToString(), out session);
+        }
+
+        public void AgentDroppedFromGroupChatSession(UUID agentID, UUID groupID)
+        {
+            SimianAddGeneric(agentID, "GroupSessionDropped", groupID.ToString(), new OSDMap());
+        }
+
+        public void AgentInvitedToGroupChatSession(UUID agentID, UUID groupID)
+        {
+            SimianAddGeneric(agentID, "GroupSessionInvited", groupID.ToString(), new OSDMap());
+        }
+
+        public bool hasAgentBeenInvitedToGroupChatSession(UUID agentID, UUID groupID)
+        {
+            OSDMap session;
+            return SimianGetGenericEntry(agentID, "GroupSessionDropped", groupID.ToString(), out session);
+        }
+
+        #endregion
 
         private void EnsureRoleNotSelectedByMember(UUID groupID, UUID roleID, UUID userID)
         {
@@ -1272,6 +1322,7 @@ namespace OpenSim.Region.OptionalModules.Avatar.XmlRpcGroups
             }
         }
         #endregion
+
     }
 
 }
