@@ -53,10 +53,10 @@
     FriendsServerURI = "http://mygridserver.com:8003"
 
 [Groups]
-	;
-	; change this to your grid-wide groups server
-	;
-	GroupsServerURI = http://mygridserver.com:82/Grid/
+    ;
+    ; change this to your grid-wide groups server
+    ;
+    GroupsServerURI = "http://mygridserver.com:82/Grid/"
 
 
 [Modules]
