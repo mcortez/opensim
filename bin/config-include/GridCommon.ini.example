@@ -40,6 +40,12 @@
     ;
     UserAccountServerURI = "http://mygridserver.com:8003"
 
+[GridUserService]
+    ;
+    ; change this to your grid-wide user accounts server
+    ;
+    GridUserServerURI = "http://mygridserver.com:8003"
+
 [AuthenticationService]
     ;
     ; change this to your grid-wide authentication server
@@ -51,6 +57,12 @@
     ; change this to your grid-wide friends server
     ;
     FriendsServerURI = "http://mygridserver.com:8003"
+
+[Groups]
+    ;
+    ; change this to your grid-wide groups server
+    ;
+    GroupsServerURI = "http://mygridserver.com:82/Grid/"
 
 
 [Modules]

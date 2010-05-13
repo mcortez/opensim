@@ -304,7 +304,18 @@ namespace OpenSim.Region.Framework.Scenes
                 return m_AvatarService;
             }
         }
-        
+
+        protected IGridUserService m_GridUserService;
+        public IGridUserService GridUserService
+        {
+            get
+            {
+                if (m_GridUserService == null)
+                    m_GridUserService = RequestModuleInterface<IGridUserService>();
+                return m_GridUserService;
+            }
+        }
+
         protected IXMLRPC m_xmlrpcModule;
         protected IWorldComm m_worldCommModule;
         public IAttachmentsModule AttachmentsModule { get; set; }
@@ -645,6 +656,10 @@ namespace OpenSim.Region.Framework.Scenes
                     }
                 }
             }
+
+            MainConsole.Instance.Commands.AddCommand("region", false, "reload estate",
+                                          "reload estate",
+                                          "Reload the estate data", HandleReloadEstate);
 
             //Bind Storage Manager functions to some land manager functions for this scene
             EventManager.OnLandObjectAdded +=
@@ -1131,7 +1146,6 @@ namespace OpenSim.Region.Framework.Scenes
         {
             if (m_scripts_enabled != !ScriptEngine)
             {
-                // Tedd!   Here's the method to disable the scripting engine!
                 if (ScriptEngine)
                 {
                     m_log.Info("Stopping all Scripts in Scene");
@@ -1153,6 +1167,7 @@ namespace OpenSim.Region.Framework.Scenes
                             if (ent is SceneObjectGroup)
                             {
                                 ((SceneObjectGroup)ent).CreateScriptInstances(0, false, DefaultScriptEngine, 0);
+                                ((SceneObjectGroup)ent).ResumeScripts();
                             }
                         }
                     }
@@ -1302,8 +1317,8 @@ namespace OpenSim.Region.Framework.Scenes
                             if (defaultRegions != null && defaultRegions.Count >= 1)
                                 home = defaultRegions[0];
 
-                            if (PresenceService != null && home != null)
-                                PresenceService.SetHomeLocation(account.PrincipalID.ToString(), home.RegionID, new Vector3(128, 128, 0), new Vector3(0, 1, 0));
+                            if (GridUserService != null && home != null)
+                                GridUserService.SetHome(account.PrincipalID.ToString(), home.RegionID, new Vector3(128, 128, 0), new Vector3(0, 1, 0));
                             else
                                 m_log.WarnFormat("[USER ACCOUNT SERVICE]: Unable to set home for account {0} {1}.",
                                    first, last);
@@ -1808,7 +1823,7 @@ namespace OpenSim.Region.Framework.Scenes
         /// <summary>
         /// Create a terrain texture for this scene
         /// </summary>
-        public void CreateTerrainTexture(bool temporary)
+        public void CreateTerrainTexture()
         {
             //create a texture asset of the terrain
             IMapImageGenerator terrain = RequestModuleInterface<IMapImageGenerator>();
@@ -1826,7 +1841,9 @@ namespace OpenSim.Region.Framework.Scenes
                 IWorldMapModule mapModule = RequestModuleInterface<IWorldMapModule>();
 
                 if (mapModule != null)
-                    mapModule.LazySaveGeneratedMaptile(data, temporary);
+                    mapModule.RegenerateMaptile(data);
+                else
+                    m_log.DebugFormat("[SCENE]: MapModule is null, can't save maptile");
             }
         }
 
@@ -2721,8 +2738,8 @@ namespace OpenSim.Region.Framework.Scenes
             client.OnObjectName += m_sceneGraph.PrimName;
             client.OnObjectClickAction += m_sceneGraph.PrimClickAction;
             client.OnObjectMaterial += m_sceneGraph.PrimMaterial;
-            client.OnLinkObjects += m_sceneGraph.LinkObjects;
-            client.OnDelinkObjects += m_sceneGraph.DelinkObjects;
+            client.OnLinkObjects += LinkObjects;
+            client.OnDelinkObjects += DelinkObjects;
             client.OnObjectDuplicate += m_sceneGraph.DuplicateObject;
             client.OnObjectDuplicateOnRay += doObjectDuplicateOnRay;
             client.OnUpdatePrimFlags += m_sceneGraph.UpdatePrimFlags;
@@ -2749,6 +2766,7 @@ namespace OpenSim.Region.Framework.Scenes
         public virtual void SubscribeToClientInventoryEvents(IClientAPI client)
         {
             client.OnCreateNewInventoryItem += CreateNewInventoryItem;
+            client.OnLinkInventoryItem += HandleLinkInventoryItem;
             client.OnCreateNewInventoryFolder += HandleCreateInventoryFolder;
             client.OnUpdateInventoryFolder += HandleUpdateInventoryFolder;
             client.OnMoveInventoryFolder += HandleMoveInventoryFolder; // 2; //!!
@@ -2768,14 +2786,13 @@ namespace OpenSim.Region.Framework.Scenes
         }
 
         public virtual void SubscribeToClientAttachmentEvents(IClientAPI client)
-        {            
-            client.OnRezMultipleAttachmentsFromInv += RezMultipleAttachments;            
-            client.OnObjectDetach += m_sceneGraph.DetachObject;
-
+        {                                    
             if (AttachmentsModule != null)
             {
                 client.OnRezSingleAttachmentFromInv += AttachmentsModule.RezSingleAttachmentFromInventory;
+                client.OnRezMultipleAttachmentsFromInv += AttachmentsModule.RezMultipleAttachmentsFromInventory;
                 client.OnObjectAttach += AttachmentsModule.AttachObject;
+                client.OnObjectDetach += AttachmentsModule.DetachObject;
                 client.OnDetachAttachmentIntoInv += AttachmentsModule.ShowDetachInUserInventory;
             }
         }
@@ -2878,8 +2895,8 @@ namespace OpenSim.Region.Framework.Scenes
             client.OnObjectName -= m_sceneGraph.PrimName;
             client.OnObjectClickAction -= m_sceneGraph.PrimClickAction;
             client.OnObjectMaterial -= m_sceneGraph.PrimMaterial;
-            client.OnLinkObjects -= m_sceneGraph.LinkObjects;
-            client.OnDelinkObjects -= m_sceneGraph.DelinkObjects;
+            client.OnLinkObjects -= LinkObjects;
+            client.OnDelinkObjects -= DelinkObjects;
             client.OnObjectDuplicate -= m_sceneGraph.DuplicateObject;
             client.OnObjectDuplicateOnRay -= doObjectDuplicateOnRay;
             client.OnUpdatePrimFlags -= m_sceneGraph.UpdatePrimFlags;
@@ -2924,14 +2941,13 @@ namespace OpenSim.Region.Framework.Scenes
         }
 
         public virtual void UnSubscribeToClientAttachmentEvents(IClientAPI client)
-        {
-            client.OnRezMultipleAttachmentsFromInv -= RezMultipleAttachments;            
-            client.OnObjectDetach -= m_sceneGraph.DetachObject;
-
+        {            
             if (AttachmentsModule != null)
             {
-                client.OnRezSingleAttachmentFromInv -= AttachmentsModule.RezSingleAttachmentFromInventory;            
+                client.OnRezSingleAttachmentFromInv -= AttachmentsModule.RezSingleAttachmentFromInventory;
+                client.OnRezMultipleAttachmentsFromInv -= AttachmentsModule.RezMultipleAttachmentsFromInventory;
                 client.OnObjectAttach -= AttachmentsModule.AttachObject;
+                client.OnObjectDetach -= AttachmentsModule.DetachObject;
                 client.OnDetachAttachmentIntoInv -= AttachmentsModule.ShowDetachInUserInventory;
             }
         }
@@ -3092,7 +3108,7 @@ namespace OpenSim.Region.Framework.Scenes
         /// <param name="flags"></param>
         public virtual void SetHomeRezPoint(IClientAPI remoteClient, ulong regionHandle, Vector3 position, Vector3 lookAt, uint flags)
         {
-            if (PresenceService.SetHomeLocation(remoteClient.AgentId.ToString(), RegionInfo.RegionID, position, lookAt))
+            if (GridUserService != null && GridUserService.SetHome(remoteClient.AgentId.ToString(), RegionInfo.RegionID, position, lookAt))
                 // FUBAR ALERT: this needs to be "Home position set." so the viewer saves a home-screenshot.
                 m_dialogModule.SendAlertToUser(remoteClient, "Home position set.");
             else
@@ -3540,7 +3556,7 @@ namespace OpenSim.Region.Framework.Scenes
 
             OpenSim.Services.Interfaces.PresenceInfo pinfo = presence.GetAgent(agent.SessionID);
 
-            if (pinfo == null || (pinfo != null && pinfo.Online == false))
+            if (pinfo == null)
             {
                 reason = String.Format("Failed to verify user {0} {1}, access denied to region {2}.", agent.firstname, agent.lastname, RegionInfo.RegionName);
                 return false;
@@ -4523,6 +4539,7 @@ namespace OpenSim.Region.Framework.Scenes
                     foreach (SceneObjectPart child in partList)
                     {
                         child.Inventory.ChangeInventoryOwner(remoteClient.AgentId);
+                        child.TriggerScriptChangedEvent(Changed.OWNER);
                         child.ApplyNextOwnerPermissions();
                     }
                 }
@@ -4532,6 +4549,8 @@ namespace OpenSim.Region.Framework.Scenes
 
                 group.HasGroupChanged = true;
                 part.GetProperties(remoteClient);
+                part.TriggerScriptChangedEvent(Changed.OWNER);
+                group.ResumeScripts();
                 part.ScheduleFullUpdate();
 
                 break;
@@ -5072,6 +5091,62 @@ namespace OpenSim.Region.Framework.Scenes
         private Vector3 GetPositionAtGround(float x, float y)
         {
             return new Vector3(x, y, GetGroundHeight(x, y));
+        }
+
+        public List<UUID> GetEstateRegions(int estateID)
+        {
+            if (m_storageManager.EstateDataStore == null)
+                return new List<UUID>();
+
+            return m_storageManager.EstateDataStore.GetRegions(estateID);
+        }
+
+        public void ReloadEstateData()
+        {
+            m_regInfo.EstateSettings = m_storageManager.EstateDataStore.LoadEstateSettings(m_regInfo.RegionID, false);
+
+            TriggerEstateSunUpdate();
+        }
+
+        public void TriggerEstateSunUpdate()
+        {
+            float sun;
+            if (RegionInfo.RegionSettings.UseEstateSun)
+            {
+                sun = (float)RegionInfo.EstateSettings.SunPosition;
+                if (RegionInfo.EstateSettings.UseGlobalTime)
+                {
+                    sun = EventManager.GetCurrentTimeAsSunLindenHour() - 6.0f;
+                }
+
+                // 
+                EventManager.TriggerEstateToolsSunUpdate(
+                        RegionInfo.RegionHandle,
+                        RegionInfo.EstateSettings.FixedSun,
+                        RegionInfo.RegionSettings.UseEstateSun,
+                        sun);
+            }
+            else
+            {
+                // Use the Sun Position from the Region Settings
+                sun = (float)RegionInfo.RegionSettings.SunPosition - 6.0f;
+
+                EventManager.TriggerEstateToolsSunUpdate(
+                        RegionInfo.RegionHandle,
+                        RegionInfo.RegionSettings.FixedSun,
+                        RegionInfo.RegionSettings.UseEstateSun,
+                        sun);
+            }
+        }
+
+        private void HandleReloadEstate(string module, string[] cmd)
+        {
+            if (MainConsole.Instance.ConsoleScene == null ||
+                (MainConsole.Instance.ConsoleScene is Scene &&
+                (Scene)MainConsole.Instance.ConsoleScene == this))
+            {
+                ReloadEstateData();
+            }
         }
     }
 }

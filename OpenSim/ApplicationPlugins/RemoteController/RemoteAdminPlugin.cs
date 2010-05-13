@@ -1012,13 +1012,15 @@ namespace OpenSim.ApplicationPlugins.RemoteController
                         throw new Exception(String.Format("Account {0} {1} already exists", firstname, lastname));
 
                     account = new UserAccount(scopeID, firstname, lastname, email);
-                    // REFACTORING PROBLEM: no method to set the password!
 
                     bool success = m_app.SceneManager.CurrentOrFirstScene.UserAccountService.StoreUserAccount(account);
 
                     if (!success)
                         throw new Exception(String.Format("failed to create new user {0} {1}",
                                                           firstname, lastname));
+
+                    // Store the password
+                    m_app.SceneManager.CurrentOrFirstScene.AuthenticationService.SetPassword(account.PrincipalID, passwd);
 
                     GridRegion home = m_app.SceneManager.CurrentOrFirstScene.GridService.GetRegionByPosition(scopeID, 
                         (int)(regX * Constants.RegionSize), (int)(regY * Constants.RegionSize));
@@ -1117,9 +1119,9 @@ namespace OpenSim.ApplicationPlugins.RemoteController
                 }
                 else
                 {
-                    PresenceInfo[] pinfos = m_app.SceneManager.CurrentOrFirstScene.PresenceService.GetAgents(new string[] { account.PrincipalID.ToString() });
-                    if (pinfos != null && pinfos.Length >= 1)
-                        responseData["lastlogin"] = pinfos[0].Login;
+                    GridUserInfo guinfo = m_app.SceneManager.CurrentOrFirstScene.GridUserService.GetGridUserInfo(account.PrincipalID.ToString());
+                    if (guinfo != null)
+                        responseData["lastlogin"] = guinfo.Login;
                     else
                         responseData["lastlogin"] = 0;
 
@@ -1609,7 +1611,7 @@ namespace OpenSim.ApplicationPlugins.RemoteController
                                 GridRegion home = m_app.SceneManager.CurrentOrFirstScene.GridService.GetRegionByPosition(scopeID, 
                                     (int)(regX * Constants.RegionSize), (int)(regY * Constants.RegionSize));
                                 if (home != null)
-                                    m_app.SceneManager.CurrentOrFirstScene.PresenceService.SetHomeLocation(account.PrincipalID.ToString(), home.RegionID, new Vector3(128, 128, 0), new Vector3(0, 1, 0));
+                                    m_app.SceneManager.CurrentOrFirstScene.GridUserService.SetHome(account.PrincipalID.ToString(), home.RegionID, new Vector3(128, 128, 0), new Vector3(0, 1, 0));
                             }
                             else
                             {
