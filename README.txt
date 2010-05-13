@@ -1,6 +1,6 @@
 Welcome to OpenSim!
 
-== OVERVIEW ==
+=== OVERVIEW ===
 
 OpenSim is a BSD Licensed Open Source project to develop a functioning
 virtual worlds server platform capable of supporting multiple clients
@@ -10,12 +10,12 @@ C#, and can run under Mono or the Microsoft .NET runtimes.
 This is considered an alpha release.  Some stuff works, a lot doesn't.
 If it breaks, you get to keep *both* pieces.
 
-== Compiling OpenSim ==
+=== Compiling OpenSim ===
 
 Please see BUILDING.txt if you downloaded a source distribution and 
 need to build OpenSim before running it.
 
-== Running OpenSim on Windows ==
+=== Running OpenSim on Windows ===
 
 We recommend that you run OpenSim from a command prompt on Windows in order
 to capture any errors, though you can also run it by double-clicking
@@ -28,7 +28,7 @@ To run OpenSim from a command prompt
 
 Now see the "Configuring OpenSim" section
 
-== Running OpenSim on Linux ==
+=== Running OpenSim on Linux ===
 
 You will need Mono >= 2.4.2 to run OpenSim.  On some Linux distributions you
 may need to install additional packages.  See http://opensimulator.org/wiki/Dependencies
@@ -41,7 +41,7 @@ To run OpenSim, from the unpacked distribution type:
 
 Now see the "Configuring OpenSim" section
 
-== Configuring OpenSim ==
+=== Configuring OpenSim ===
 
 When OpenSim starts for the first time, you will be prompted with a
 series of questions that look something like:
@@ -59,7 +59,8 @@ Once you are presented with a prompt that looks like:
 
 You have successfully started OpenSim.
 
-Before you can log in you will need to create a user account.  You can do
+Before you can log in you will need to create a user account if you didn't already create
+your user as the "Master Avatar" during the region configuration stage.  You can do
 this by running the "create user" command on the OpenSim console.  This will
 ask you a series of questions such as first name, last name and password.
 
@@ -68,14 +69,14 @@ Helpful resources:
  * http://opensimulator.org/wiki/Configuring_Regions
  * http://opensimulator.org/wiki/Mysql-config
 
-== Connecting to your OpenSim ==
+=== Connecting to your OpenSim ===
 
 By default your sim will be running on http://127.0.0.1:9000.  To use
 your OpenSim add -loginuri http://127.0.0.1:9000 to your second life
 client (running on the same machine as your OpenSim).  To login, use the
 same avatar details that you gave to the "create user" console command.
 
-== Bug reports ==
+=== Bug reports ===
 
 In the likely event of bugs biting you (err, your OpenSim) we
 encourage you to see whether the problem has already been reported on
@@ -96,10 +97,11 @@ mantis"). Useful information to include:
 
        mono --debug OpenSim.exe
 
-== More Information on OpenSim ==
+=== More Information on OpenSim ===
 
 More extensive information on building, running, and configuring
 OpenSim, as well as how to report bugs, and participate in the OpenSim
 project can always be found at http://opensimulator.org.
 
 Thanks for trying OpenSim, we hope it is a pleasant experience.
+ 

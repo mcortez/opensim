@@ -46,7 +46,7 @@ namespace OpenSim.Services.UserAccountService
 
         protected IGridService m_GridService;
         protected IAuthenticationService m_AuthenticationService;
-        protected IPresenceService m_PresenceService;
+        protected IGridUserService m_GridUserService;
         protected IInventoryService m_InventoryService;
 
         public UserAccountService(IConfigSource config)
@@ -69,9 +69,9 @@ namespace OpenSim.Services.UserAccountService
                 if (authServiceDll != string.Empty)
                     m_AuthenticationService = LoadPlugin<IAuthenticationService>(authServiceDll, new Object[] { config });
 
-                string presenceServiceDll = userConfig.GetString("PresenceService", string.Empty);
+                string presenceServiceDll = userConfig.GetString("GridUserService", string.Empty);
                 if (presenceServiceDll != string.Empty)
-                    m_PresenceService = LoadPlugin<IPresenceService>(presenceServiceDll, new Object[] { config });
+                    m_GridUserService = LoadPlugin<IGridUserService>(presenceServiceDll, new Object[] { config });
 
                 string invServiceDll = userConfig.GetString("InventoryService", string.Empty);
                 if (invServiceDll != string.Empty)
@@ -104,6 +104,12 @@ namespace OpenSim.Services.UserAccountService
                 d = m_Database.Get(
                         new string[] { "ScopeID", "FirstName", "LastName" },
                         new string[] { scopeID.ToString(), firstName, lastName });
+                if (d.Length < 1)
+                {
+                    d = m_Database.Get(
+                            new string[] { "ScopeID", "FirstName", "LastName" },
+                            new string[] { UUID.Zero.ToString(), firstName, lastName });
+                }
             }
             else
             {
@@ -172,6 +178,12 @@ namespace OpenSim.Services.UserAccountService
                 d = m_Database.Get(
                         new string[] { "ScopeID", "Email" },
                         new string[] { scopeID.ToString(), email });
+                if (d.Length < 1)
+                {
+                    d = m_Database.Get(
+                            new string[] { "ScopeID", "Email" },
+                            new string[] { UUID.Zero.ToString(), email });
+                }
             }
             else
             {
@@ -195,6 +207,12 @@ namespace OpenSim.Services.UserAccountService
                 d = m_Database.Get(
                         new string[] { "ScopeID", "PrincipalID" },
                         new string[] { scopeID.ToString(), principalID.ToString() });
+                if (d.Length < 1)
+                {
+                    d = m_Database.Get(
+                            new string[] { "ScopeID", "PrincipalID" },
+                            new string[] { UUID.Zero.ToString(), principalID.ToString() });
+                }
             }
             else
             {
@@ -315,8 +333,8 @@ namespace OpenSim.Services.UserAccountService
                         if (defaultRegions != null && defaultRegions.Count >= 1)
                             home = defaultRegions[0];
 
-                        if (m_PresenceService != null && home != null)
-                            m_PresenceService.SetHomeLocation(account.PrincipalID.ToString(), home.RegionID, new Vector3(128, 128, 0), new Vector3(0, 1, 0));
+                        if (m_GridUserService != null && home != null)
+                            m_GridUserService.SetHome(account.PrincipalID.ToString(), home.RegionID, new Vector3(128, 128, 0), new Vector3(0, 1, 0));
                         else
                             m_log.WarnFormat("[USER ACCOUNT SERVICE]: Unable to set home for account {0} {1}.",
                                firstName, lastName);
