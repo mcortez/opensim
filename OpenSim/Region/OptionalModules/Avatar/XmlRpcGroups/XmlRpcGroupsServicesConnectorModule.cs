@@ -117,7 +117,7 @@ namespace OpenSim.Region.OptionalModules.Avatar.XmlRpcGroups
 
                 m_log.InfoFormat("[XMLRPC-GROUPS-CONNECTOR]: Initializing {0}", this.Name);
 
-                m_groupsServerURI = groupsConfig.GetString("GroupsServerURI", string.Empty);
+                m_groupsServerURI = groupsConfig.GetString("GroupsServerURI", groupsConfig.GetString("XmlRpcServiceURL", string.Empty));
                 if ((m_groupsServerURI == null) ||
                     (m_groupsServerURI == string.Empty))
                 {
