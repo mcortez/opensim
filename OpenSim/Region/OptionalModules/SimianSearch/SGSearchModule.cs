@@ -98,12 +98,14 @@ namespace OpenSim.Region.OptionalModules.SGSearch
             }
             else
             {
-                m_moduleEnabled = searchConfig.GetBoolean("Enabled", false);
+                // TODO: This is probably bad behavior to default to true, but ... it's what we're going to do for now
+                m_moduleEnabled = searchConfig.GetBoolean("Enabled", true); 
                 if (!m_moduleEnabled)
                 {
                     return;
                 }
 
+                // TODO: Again, assuming we're the default module is a bad idea, but it is what it is
                 if (searchConfig.GetString("Module", "SGSearch") != Name)
                 {
                     m_moduleEnabled = false;
@@ -117,9 +119,11 @@ namespace OpenSim.Region.OptionalModules.SGSearch
                 if ((m_simianGridServerURI == null) ||
                     (m_simianGridServerURI == string.Empty))
                 {
-                    m_log.ErrorFormat("[SGSearch] Please specify a valid Simian Server for ServerURI in OpenSim.ini, [Search]");
-                    m_moduleEnabled = false;
-                    return;
+                    m_log.WarnFormat("[SGSearch] Please specify a valid Simian Server for ServerURI in OpenSim.ini, [Search]");
+                    
+                    // This is not actually needed yet, so we can ignore if it's not present
+                    // m_moduleEnabled = false;
+                    // return;
                 }
 
 
@@ -226,6 +230,18 @@ namespace OpenSim.Region.OptionalModules.SGSearch
             }
             else if (((DirFindFlags)queryFlags & DirFindFlags.People) == DirFindFlags.People)
             {
+
+                if (m_cacheTimeout == 0)
+                {
+                    // optionally decide to use the account service which probably doesn't do any caching, or if it 
+                    // does, honor whatever it's cache is
+                    //
+                }
+                else
+                {
+                    // if cache is non-zero, should probably query Grid Services directly and cache locally
+                }
+
                 List<UserAccount> accounts = m_accountService.GetUserAccounts(UUID.Zero, queryText);
 
                 DirPeopleReplyData[] reply = new DirPeopleReplyData[accounts.Count];
